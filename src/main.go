@@ -48,7 +48,7 @@ func initDB() error {
 		description VARCHAR(255) not null,
 		exception VARCHAR(255) not null,
 		excp_description VARCHAR(255) not null,
-		unique(event_datetime, source, description, exception, excp_description)
+		unique(event_datetime, source, description)
 	)
 	`)
 	fmt.Println("table created")
@@ -79,7 +79,7 @@ func readLogFileUsingTail() {
 		} else {
 			event = e
 		}
-		if strings.HasPrefix(line, "Caused by:") {
+		if event != nil && strings.HasPrefix(line, "Caused by:") {
 			parts := strings.Split(line, ":")
 			var causedBy *CausedBy = new(CausedBy)
 			causedBy.Exception = parts[1]
@@ -88,6 +88,7 @@ func readLogFileUsingTail() {
 			if err != nil {
 				fmt.Printf("Failed inserting error event in DB: %v\n", err)
 			}
+			event = nil
 		}
 	}
 }
