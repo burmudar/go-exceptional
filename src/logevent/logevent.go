@@ -2,6 +2,7 @@ package logevent
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -19,6 +20,10 @@ type LogEvent struct {
 	Level       LogLevel
 	Source      string
 	Description string
+}
+
+func (e *LogEvent) string() string {
+	return fmt.Sprintf("Event: %v | %v | %v | %v", e.Timestamp, e.Level, e.Source, e.Description)
 }
 
 func Parse(line string) (*LogEvent, error) {
