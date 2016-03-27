@@ -8,6 +8,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"logevent"
 	"os"
+	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -19,6 +21,18 @@ type CausedBy struct {
 }
 
 func main() {
+
+	files := []string{}
+	filepath.Walk("logs", func(p string, i os.FileInfo, err error) error {
+		if path.Ext(p) == ".log" {
+			files = append(files, p)
+		}
+		return nil
+	})
+	startReading(files)
+}
+
+func startReading(files []string) {
 	var err error
 	db, err = sql.Open("sqlite3", "errors.db")
 	if err != nil {
@@ -35,7 +49,11 @@ func main() {
 			return
 		}
 	}
-	readLogFileUsingTail()
+	fmt.Printf("Files: %v\n", files)
+	for _, filePath := range files {
+		fmt.Printf("Loading File: %v\n", filePath)
+		readLogFileUsingScanner(filePath)
+	}
 }
 
 func initDB() error {
@@ -80,10 +98,7 @@ func readLogFileUsingTail() {
 			event = e
 		}
 		if event != nil && strings.HasPrefix(line, "Caused by:") {
-			parts := strings.Split(line, ":")
-			var causedBy *CausedBy = new(CausedBy)
-			causedBy.Exception = parts[1]
-			causedBy.Description = parts[2]
+			causedBy := createCausedByFromLine(&line)
 			err = addToDB(event, causedBy)
 			if err != nil {
 				fmt.Printf("Failed inserting error event in DB: %v\n", err)
@@ -91,6 +106,19 @@ func readLogFileUsingTail() {
 			event = nil
 		}
 	}
+}
+
+func createCausedByFromLine(line *string) *CausedBy {
+	parts := strings.Split(*line, ":")
+	var causedBy *CausedBy = new(CausedBy)
+	causedBy.Exception = parts[1]
+	if len(parts) == 3 {
+		causedBy.Description = parts[2]
+	} else {
+		//some exceptions don't have causes ex. "Caused By: java.xml.UnmarshallException"
+		causedBy.Description = ""
+	}
+	return causedBy
 }
 
 func addToDB(event *logevent.LogEvent, causedBy *CausedBy) error {
@@ -106,12 +134,13 @@ func addToDB(event *logevent.LogEvent, causedBy *CausedBy) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Rows Affected: %v", r.RowsAffected)
+	fmt.Printf("Rows Affected: %d\n", r.RowsAffected)
+	fmt.Printf("Last ID: %d\n", r.LastInsertId)
 	return nil
 }
 
-func readLogFileUsingScanner() {
-	file, err := os.Open("simcontrol.log")
+func readLogFileUsingScanner(logFilePath string) {
+	file, err := os.Open(logFilePath)
 	if err != nil {
 		fmt.Errorf("Error occured while opening '%v' for reading. Error: %v", "simcontrol.log", err)
 	}
@@ -125,12 +154,13 @@ func readLogFileUsingScanner() {
 		} else {
 			event = e
 		}
-		if strings.HasPrefix(line, "Caused by:") {
-			parts := strings.Split(line, ":")
-			var causedBy *CausedBy = new(CausedBy)
-			causedBy.Exception = parts[1]
-			causedBy.Description = parts[2]
-			fmt.Printf("%v was caused by: %v\n", event, causedBy)
+		if event != nil && strings.HasPrefix(line, "Caused by:") {
+			causedBy := createCausedByFromLine(&line)
+			err = addToDB(event, causedBy)
+			if err != nil {
+				fmt.Printf("Failed inserting error event in DB: %v\n", err)
+			}
+			event = nil
 		}
 	}
 }
