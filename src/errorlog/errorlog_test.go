@@ -1,4 +1,4 @@
-package logevent
+package errorlog
 
 import (
 	"testing"
@@ -18,7 +18,7 @@ func TestParseOfINFOLine(t *testing.T) {
 	}
 
 	if logEvent.Level != INFO_LOG_LEVEL {
-		t.Errorf("LogEvent should have INFO LogLevel. Got [%v] instead", logEvent.Level)
+		t.Errorf("LogEvent should have INFO Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 564*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
@@ -49,7 +49,7 @@ func TestParseOfTRACELine(t *testing.T) {
 	}
 
 	if logEvent.Level != TRACE_LOG_LEVEL {
-		t.Errorf("LogEvent should have TRACE LogLevel. Got [%v] instead", logEvent.Level)
+		t.Errorf("LogEvent should have TRACE Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 608*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
@@ -80,7 +80,7 @@ func TestParseOfDEBUGLine(t *testing.T) {
 	}
 
 	if logEvent.Level != DEBUG_LOG_LEVEL {
-		t.Errorf("LogEvent should have DEBUG LogLevel. Got [%v] instead", logEvent.Level)
+		t.Errorf("LogEvent should have DEBUG Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 615*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
@@ -111,7 +111,7 @@ func TestParseOfERRORLine(t *testing.T) {
 	}
 
 	if logEvent.Level != ERROR_LOG_LEVEL {
-		t.Errorf("LogEvent should have ERROR LogLevel. Got [%v] instead", logEvent.Level)
+		t.Errorf("LogEvent should have ERROR Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 939*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
@@ -152,47 +152,47 @@ func TestRemoveSource(t *testing.T) {
 	}
 }
 
-func TestExtractLogLevel(t *testing.T) {
+func TestExtractLevel(t *testing.T) {
 	var infoLine string = "  INFO someother stuff here"
 	var debugLine string = " DEBUG someother stuff here"
 	var traceLine string = " TRACE someother stuff here"
 	var errorLine string = "ERROR someother stuff here"
 	var leftOver = "someother stuff here"
 
-	line, level := removeLogLevel(infoLine)
+	line, level := removeLevel(infoLine)
 	if line != leftOver {
 		t.Errorf("Expected line with INFO removed to be returned got [%v]", line)
 	}
 	if level != INFO_LOG_LEVEL {
-		t.Errorf("Expected INFO LogLevel to be removeed got [%v]", level)
+		t.Errorf("Expected INFO Level to be removeed got [%v]", level)
 	}
 
-	line, level = removeLogLevel(debugLine)
+	line, level = removeLevel(debugLine)
 	if line != leftOver {
 		t.Errorf("Expected line with DEBUG removed to be returned got [%v]", line)
 	}
 	if level != DEBUG_LOG_LEVEL {
-		t.Errorf("Expected DEBUG LogLevel to be removeed got [%v]", level)
+		t.Errorf("Expected DEBUG Level to be removeed got [%v]", level)
 	}
 
-	line, level = removeLogLevel(traceLine)
+	line, level = removeLevel(traceLine)
 	if line != leftOver {
 		t.Errorf("Expected line with TRACE removed to be returned got [%v]", line)
 	}
 	if level != TRACE_LOG_LEVEL {
-		t.Errorf("Expected TRACE LogLevel to be removeed got [%v]", level)
+		t.Errorf("Expected TRACE Level to be removeed got [%v]", level)
 	}
 
-	line, level = removeLogLevel(errorLine)
+	line, level = removeLevel(errorLine)
 	if line != leftOver {
 		t.Errorf("Expected line with ERROR removed to be returned got [%v]", line)
 	}
 	if level != ERROR_LOG_LEVEL {
-		t.Errorf("Expected ERROR LogLevel to be removeed got [%v]", level)
+		t.Errorf("Expected ERROR Level to be removeed got [%v]", level)
 	}
 
 	var unkownLine = "UNKOWN something"
-	line, level = removeLogLevel(unkownLine)
+	line, level = removeLevel(unkownLine)
 	if level != EMPTY_LOG_LEVEL {
 		t.Errorf("When Log Level is not known in string or not found, EMPTY_LOG_LEVEL should be returned. Got [%v]", level)
 	}

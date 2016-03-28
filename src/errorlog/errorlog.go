@@ -1,4 +1,4 @@
-package logevent
+package errorlog
 
 import (
 	"errors"
@@ -7,27 +7,27 @@ import (
 	"time"
 )
 
-type LogLevel string
+type Level string
 
-const INFO_LOG_LEVEL LogLevel = "INFO"
-const DEBUG_LOG_LEVEL LogLevel = "DEBUG"
-const TRACE_LOG_LEVEL LogLevel = "TRACE"
-const ERROR_LOG_LEVEL LogLevel = "ERROR"
-const EMPTY_LOG_LEVEL LogLevel = ""
+const INFO_LOG_LEVEL Level = "INFO"
+const DEBUG_LOG_LEVEL Level = "DEBUG"
+const TRACE_LOG_LEVEL Level = "TRACE"
+const ERROR_LOG_LEVEL Level = "ERROR"
+const EMPTY_LOG_LEVEL Level = ""
 
-type LogEvent struct {
+type Event struct {
 	Timestamp   *time.Time
-	Level       LogLevel
+	Level       Level
 	Source      string
 	Description string
 }
 
-func (e *LogEvent) string() string {
+func (e *Event) string() string {
 	return fmt.Sprintf("Event: %v | %v | %v | %v", e.Timestamp, e.Level, e.Source, e.Description)
 }
 
-func Parse(line string) (*LogEvent, error) {
-	event := new(LogEvent)
+func Parse(line string) (*Event, error) {
+	event := new(Event)
 	line, date := removeFirstBetweenBrackets(line)
 
 	timestamp, err := toTimestamp(date)
@@ -35,7 +35,7 @@ func Parse(line string) (*LogEvent, error) {
 		return nil, err
 	}
 	event.Timestamp = timestamp
-	line, level := removeLogLevel(line)
+	line, level := removeLevel(line)
 	if level == EMPTY_LOG_LEVEL {
 		return nil, errors.New("No Log Level found. Log Level cannto be empty")
 	}
@@ -61,10 +61,10 @@ func removeSource(line string) (string, string) {
 	return newLine, source
 }
 
-func removeLogLevel(line string) (string, LogLevel) {
+func removeLevel(line string) (string, Level) {
 	line = strings.TrimLeft(line, " ")
 	end := strings.Index(line, " ")
-	var level LogLevel = LogLevel(line[0:end])
+	var level Level = Level(line[0:end])
 	newLine := strings.TrimLeft(line[end:len(line)], " ")
 	switch level {
 	case INFO_LOG_LEVEL:
