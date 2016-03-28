@@ -14,6 +14,7 @@ const DEBUG_LOG_LEVEL Level = "DEBUG"
 const TRACE_LOG_LEVEL Level = "TRACE"
 const ERROR_LOG_LEVEL Level = "ERROR"
 const EMPTY_LOG_LEVEL Level = ""
+const DATE_FORMAT string = "2006-01-02 15:04:05.000"
 
 const CAUSED_BY string = "Caused by:"
 
@@ -152,7 +153,7 @@ func removeLevel(line string) (string, Level) {
 
 func toTimestamp(date string) (*time.Time, error) {
 	date = strings.Replace(date, ",", ".", 1)
-	timestamp, err := time.Parse("2006-01-02 15:04:05.000", date)
+	timestamp, err := time.Parse(DATE_FORMAT, date)
 	return &timestamp, err
 }
 
