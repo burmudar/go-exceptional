@@ -3,10 +3,11 @@ package main
 import (
 	"bufio"
 	"database/sql"
+	"errorlog"
+	"errors"
 	"fmt"
 	"github.com/hpcloud/tail"
 	_ "github.com/mattn/go-sqlite3"
-	"logevent"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,10 +16,7 @@ import (
 
 var db *sql.DB
 
-type CausedBy struct {
-	Exception   string
-	Description string
-}
+var ErrNotCausedByLine error = errors.New("Line does not contain 'Caused by'")
 
 func main() {
 
@@ -88,54 +86,52 @@ func hasTable(name string) bool {
 
 func readLogFileUsingTail() {
 	t, _ := tail.TailFile("simcontrol.log", tail.Config{Follow: true, ReOpen: true})
-	var event *logevent.LogEvent = nil
+	var event *errorlog.Event = nil
 	for l := range t.Lines {
 		line := l.Text
-		e, err := logevent.Parse(line)
+		e, err := errorlog.ParseLogLine(line)
 		if err != nil {
 			fmt.Errorf("Failed parsing: %v\n", err)
 		} else {
 			event = e
 		}
-		if event != nil && strings.HasPrefix(line, "Caused by:") {
-			causedBy := createCausedByFromLine(&line)
-			err = addToDB(event, causedBy)
-			if err != nil {
-				fmt.Printf("Failed inserting error event in DB: %v\n", err)
-			}
+		errorEvent, err := processEventIfIsCausedByLine(line, event)
+		if errorEvent != nil {
 			event = nil
 		}
 	}
 }
 
-func createCausedByFromLine(line *string) *CausedBy {
-	parts := strings.Split(*line, ":")
-	var causedBy *CausedBy = new(CausedBy)
-	causedBy.Exception = parts[1]
-	if len(parts) == 3 {
-		causedBy.Description = parts[2]
-	} else {
-		//some exceptions don't have causes ex. "Caused By: java.xml.UnmarshallException"
-		causedBy.Description = ""
+func processEventIfIsCausedByLine(line string, event *errorlog.Event) (*errorlog.ErrorEvent, error) {
+	if errorlog.ContainsCausedBy(line) {
+		errorEvent, err := errorlog.ParseCausedBy(line, event)
+		if err != nil {
+			return nil, err
+		} else {
+			err = addToDB(errorEvent)
+			if err != nil {
+				return nil, err
+			} else {
+				return errorEvent, nil
+			}
+		}
 	}
-	return causedBy
+	return nil, ErrNotCausedByLine
 }
 
-func addToDB(event *logevent.LogEvent, causedBy *CausedBy) error {
+func addToDB(errorEvent *errorlog.ErrorEvent) error {
 	var count int
 	db.QueryRow(`select count(id) from error_events where event_datetime=? AND source=? AND description=? AND exception=? AND excp_description=?`,
-		event.Timestamp, event.Source, event.Description, causedBy.Exception, causedBy.Description).Scan(&count)
+		errorEvent.Timestamp, errorEvent.Source, errorEvent.Description, errorEvent.Exception, errorEvent.Description).Scan(&count)
 	if count > 0 {
-		fmt.Printf("Count %v : Already Contains %v : %v", count, event, causedBy)
+		fmt.Printf("Count %v : Already Contains [%v]\n", errorEvent)
 		return nil
 	}
-	r, err := db.Exec(`insert into error_events(event_datetime, level, source, description, exception, excp_description) 
-	values (?, ?, ?, ?, ?, ?)`, event.Timestamp, string(event.Level), event.Source, event.Description, causedBy.Exception, causedBy.Description)
+	_, err := db.Exec(`insert into error_events(event_datetime, level, source, description, exception, excp_description) 
+	values (?, ?, ?, ?, ?, ?)`, errorEvent.Timestamp, string(errorEvent.Level), errorEvent.Source, errorEvent.Description, errorEvent.Exception, errorEvent.Description)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Rows Affected: %d\n", r.RowsAffected)
-	fmt.Printf("Last ID: %d\n", r.LastInsertId)
 	return nil
 }
 
@@ -145,21 +141,17 @@ func readLogFileUsingScanner(logFilePath string) {
 		fmt.Errorf("Error occured while opening '%v' for reading. Error: %v", "simcontrol.log", err)
 	}
 	scanner := bufio.NewScanner(file)
-	var event *logevent.LogEvent = nil
+	var event *errorlog.Event = nil
 	for scanner.Scan() {
 		line := scanner.Text()
-		e, err := logevent.Parse(line)
+		e, err := errorlog.ParseLogLine(line)
 		if err != nil {
 			fmt.Errorf("Failed parsing: %v\n", err)
 		} else {
 			event = e
 		}
-		if event != nil && strings.HasPrefix(line, "Caused by:") {
-			causedBy := createCausedByFromLine(&line)
-			err = addToDB(event, causedBy)
-			if err != nil {
-				fmt.Printf("Failed inserting error event in DB: %v\n", err)
-			}
+		errorEvent, err := processEventIfIsCausedByLine(line, event)
+		if errorEvent != nil {
 			event = nil
 		}
 	}
