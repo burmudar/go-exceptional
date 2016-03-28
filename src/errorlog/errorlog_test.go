@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-func TestParseOfINFOLine(t *testing.T) {
+func TestParseLogLineOfINFOLine(t *testing.T) {
 	const INFO_LINE string = "[2016-03-23 15:41:48,564] INFO  worker.DealerBalanceUpdater:27 - Starting update of dealer balance"
-	logEvent, err := Parse(INFO_LINE)
+	logEvent, err := ParseLogLine(INFO_LINE)
 
 	if logEvent == nil && err == nil {
-		t.Errorf("When LogEvent is nil, Error cannot be nil")
+		t.Errorf("When Event is nil, Error cannot be nil")
 	}
 
 	if err != nil {
@@ -18,30 +18,30 @@ func TestParseOfINFOLine(t *testing.T) {
 	}
 
 	if logEvent.Level != INFO_LOG_LEVEL {
-		t.Errorf("LogEvent should have INFO Level. Got [%v] instead", logEvent.Level)
+		t.Errorf("Event should have INFO Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 564*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
-		t.Errorf("LogEvent does not contain the Timestamp as its defined in the INFO line: [%v] - Error: [%v]", logEvent.Timestamp, err)
+		t.Errorf("Event does not contain the Timestamp as its defined in the INFO line: [%v] - Error: [%v]", logEvent.Timestamp, err)
 	}
 
 	expctedSource := "worker.DealerBalanceUpdater:27"
 	if logEvent.Source != expctedSource {
-		t.Errorf("LogEvent does not contain source as its defined in the INFO line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
+		t.Errorf("Event does not contain source as its defined in the INFO line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
 	}
 
 	expectedDescription := "Starting update of dealer balance"
 	if logEvent.Description != expectedDescription {
-		t.Errorf("LogEvent does not contain description as its defined in the INFO line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
+		t.Errorf("Event does not contain description as its defined in the INFO line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
 	}
 }
 
-func TestParseOfTRACELine(t *testing.T) {
+func TestParseLogLineOfTRACELine(t *testing.T) {
 	const TRACE_LINE string = "[2016-03-23 15:41:48,608] TRACE worker.SimConsumerImpl:183 - null : Retrieving Balance of Sim id: 0 from Recharge Service"
-	logEvent, err := Parse(TRACE_LINE)
+	logEvent, err := ParseLogLine(TRACE_LINE)
 
 	if logEvent == nil && err == nil {
-		t.Errorf("When LogEvent is nil, Error cannot be nil")
+		t.Errorf("When Event is nil, Error cannot be nil")
 	}
 
 	if err != nil {
@@ -49,30 +49,30 @@ func TestParseOfTRACELine(t *testing.T) {
 	}
 
 	if logEvent.Level != TRACE_LOG_LEVEL {
-		t.Errorf("LogEvent should have TRACE Level. Got [%v] instead", logEvent.Level)
+		t.Errorf("Event should have TRACE Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 608*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
-		t.Errorf("LogEvent does not contain the Timestamp as its defined in the TRACE line: [%v] - Error: [%v]", logEvent.Timestamp, err)
+		t.Errorf("Event does not contain the Timestamp as its defined in the TRACE line: [%v] - Error: [%v]", logEvent.Timestamp, err)
 	}
 
 	expctedSource := "worker.SimConsumerImpl:183"
 	if logEvent.Source != expctedSource {
-		t.Errorf("LogEvent does not contain source as its defined in the TRACE line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
+		t.Errorf("Event does not contain source as its defined in the TRACE line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
 	}
 
 	expectedDescription := "null : Retrieving Balance of Sim id: 0 from Recharge Service"
 	if logEvent.Description != expectedDescription {
-		t.Errorf("LogEvent does not contain description as its defined in the TRACE line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
+		t.Errorf("Event does not contain description as its defined in the TRACE line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
 	}
 }
 
-func TestParseOfDEBUGLine(t *testing.T) {
+func TestParseLogLineOfDEBUGLine(t *testing.T) {
 	const DEBUG_LINE string = "[2016-03-23 15:41:48,615] DEBUG worker.SimConsumerImpl:129 - null : Sending recharge to service"
-	logEvent, err := Parse(DEBUG_LINE)
+	logEvent, err := ParseLogLine(DEBUG_LINE)
 
 	if logEvent == nil && err == nil {
-		t.Errorf("When LogEvent is nil, Error cannot be nil")
+		t.Errorf("When Event is nil, Error cannot be nil")
 	}
 
 	if err != nil {
@@ -80,30 +80,30 @@ func TestParseOfDEBUGLine(t *testing.T) {
 	}
 
 	if logEvent.Level != DEBUG_LOG_LEVEL {
-		t.Errorf("LogEvent should have DEBUG Level. Got [%v] instead", logEvent.Level)
+		t.Errorf("Event should have DEBUG Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 615*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
-		t.Errorf("LogEvent does not contain the Timestamp as its defined in the DEBUG line: [%v] - Error: [%v]", logEvent.Timestamp, err)
+		t.Errorf("Event does not contain the Timestamp as its defined in the DEBUG line: [%v] - Error: [%v]", logEvent.Timestamp, err)
 	}
 
 	expctedSource := "worker.SimConsumerImpl:129"
 	if logEvent.Source != expctedSource {
-		t.Errorf("LogEvent does not contain source as its defined in the DEBUG line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
+		t.Errorf("Event does not contain source as its defined in the DEBUG line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
 	}
 
 	expectedDescription := "null : Sending recharge to service"
 	if logEvent.Description != expectedDescription {
-		t.Errorf("LogEvent does not contain description as its defined in the DEBUG line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
+		t.Errorf("Event does not contain description as its defined in the DEBUG line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
 	}
 }
 
-func TestParseOfERRORLine(t *testing.T) {
+func TestParseLogLineOfERRORLine(t *testing.T) {
 	const ERROR_LINE string = "[2016-03-23 15:41:48,939] ERROR client.AirtelService:54 - 0833574730 : Encountered an error while querying balance : TranRef[testRef]"
-	logEvent, err := Parse(ERROR_LINE)
+	logEvent, err := ParseLogLine(ERROR_LINE)
 
 	if logEvent == nil && err == nil {
-		t.Errorf("When LogEvent is nil, Error cannot be nil")
+		t.Errorf("When Event is nil, Error cannot be nil")
 	}
 
 	if err != nil {
@@ -111,21 +111,21 @@ func TestParseOfERRORLine(t *testing.T) {
 	}
 
 	if logEvent.Level != ERROR_LOG_LEVEL {
-		t.Errorf("LogEvent should have ERROR Level. Got [%v] instead", logEvent.Level)
+		t.Errorf("Event should have ERROR Level. Got [%v] instead", logEvent.Level)
 	}
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 939*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
-		t.Errorf("LogEvent does not contain the Timestamp as its defined in the ERROR line: [%v] - Error: [%v]", logEvent.Timestamp, err)
+		t.Errorf("Event does not contain the Timestamp as its defined in the ERROR line: [%v] - Error: [%v]", logEvent.Timestamp, err)
 	}
 
 	expctedSource := "client.AirtelService:54"
 	if logEvent.Source != expctedSource {
-		t.Errorf("LogEvent does not contain source as its defined in the ERROR line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
+		t.Errorf("Event does not contain source as its defined in the ERROR line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
 	}
 
 	expectedDescription := "0833574730 : Encountered an error while querying balance : TranRef[testRef]"
 	if logEvent.Description != expectedDescription {
-		t.Errorf("LogEvent does not contain description as its defined in the ERROR line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
+		t.Errorf("Event does not contain description as its defined in the ERROR line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
 	}
 }
 
@@ -240,4 +240,28 @@ func TestRemoveDatePortion(t *testing.T) {
 	if removedPart != "" {
 		t.Error("When given string contains no brackets, removed Part should be empty. Got [%v]", removedPart)
 	}
+}
+
+func TestContainsCausedBy(t *testing.T) {
+	if ContainsCausedBy("caused by:") {
+		t.Errorf("Should only return true when string contains 'Caused by:' case sensitive")
+	}
+	if ContainsCausedBy("") {
+		t.Errorf("Empty string does not contain 'Caused by:'")
+	}
+	if !ContainsCausedBy("      Caused by:") {
+		t.Errorf("String with whitespace before 'Caused by:' is valid and should not be rejected")
+	}
+	if !ContainsCausedBy("Caused by:") {
+		t.Errorf("String containing exact 'Caused by:' should not be rejected")
+	}
+
+}
+
+func TestExtractCausedBy(t *testing.T) {
+	/*
+		var NORMAL_CAUSED_BY = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
+		var CAUSED_BY_WITHOUT_DETAIL = "Caused by: javax.xml.bind.UnmarshalException"
+		var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL = "Caused by:"
+	*/
 }

@@ -15,6 +15,8 @@ const TRACE_LOG_LEVEL Level = "TRACE"
 const ERROR_LOG_LEVEL Level = "ERROR"
 const EMPTY_LOG_LEVEL Level = ""
 
+const CAUSED_BY string = "Caused by:"
+
 type Event struct {
 	Timestamp   *time.Time
 	Level       Level
@@ -22,11 +24,21 @@ type Event struct {
 	Description string
 }
 
+type causedby struct {
+	Exception string
+	Detail    string
+}
+
+type ErrorEvent struct {
+	Event
+	causedby
+}
+
 func (e *Event) string() string {
 	return fmt.Sprintf("Event: %v | %v | %v | %v", e.Timestamp, e.Level, e.Source, e.Description)
 }
 
-func Parse(line string) (*Event, error) {
+func ParseLogLine(line string) (*Event, error) {
 	event := new(Event)
 	line, date := removeFirstBetweenBrackets(line)
 
@@ -48,6 +60,18 @@ func Parse(line string) (*Event, error) {
 	event.Source = source
 	event.Description = line
 	return event, nil
+}
+
+func ParseCausedBy(line string, e *Event) *ErrorEvent {
+	return nil
+}
+
+func ContainsCausedBy(line string) bool {
+	line = strings.TrimLeft(line, " ")
+	if strings.HasPrefix(line, CAUSED_BY) {
+		return true
+	}
+	return false
 }
 
 func removeSource(line string) (string, string) {
