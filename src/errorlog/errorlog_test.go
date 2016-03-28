@@ -259,9 +259,38 @@ func TestContainsCausedBy(t *testing.T) {
 }
 
 func TestExtractCausedBy(t *testing.T) {
-	/*
-		var NORMAL_CAUSED_BY = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
-		var CAUSED_BY_WITHOUT_DETAIL = "Caused by: javax.xml.bind.UnmarshalException"
-		var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL = "Caused by:"
-	*/
+	var NORMAL_CAUSED_BY = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
+	var CAUSED_BY_WITHOUT_DETAIL = "Caused by: javax.xml.bind.UnmarshalException"
+	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL = "Caused by:"
+
+	causedBy := extractCausedBy(NORMAL_CAUSED_BY)
+	if causedBy == nil {
+		t.Errorf("No Caused By extracted from valid Caused by line: [%v]\n", NORMAL_CAUSED_BY)
+	}
+	expectedException := "com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException"
+	if causedBy.Exception != expectedException {
+		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, causedBy.Exception)
+	}
+	expectedDetail := "UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
+	if causedBy.Detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, causedBy.Detail)
+	}
+
+	causedBy = extractCausedBy(CAUSED_BY_WITHOUT_DETAIL)
+
+	if causedBy == nil {
+		t.Errorf("No Caused By extracted from valid Caused by line: [%v]\n", CAUSED_BY_WITHOUT_DETAIL)
+	}
+	expectedException = "javax.xml.bind.UnmarshalException"
+	if causedBy.Exception != expectedException {
+		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, causedBy.Exception)
+	}
+	expectedDetail = ""
+	if causedBy.Detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, causedBy.Detail)
+	}
+	causedBy = extractCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL)
+	if causedBy != nil {
+		t.Errorf("Caused by with no exception nor detail is invalid and should return nil. Got [%v]\n", causedBy)
+	}
 }

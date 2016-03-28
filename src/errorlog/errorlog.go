@@ -24,14 +24,14 @@ type Event struct {
 	Description string
 }
 
-type causedby struct {
+type causedBy struct {
 	Exception string
 	Detail    string
 }
 
 type ErrorEvent struct {
 	Event
-	causedby
+	causedBy
 }
 
 func (e *Event) string() string {
@@ -64,6 +64,29 @@ func ParseLogLine(line string) (*Event, error) {
 
 func ParseCausedBy(line string, e *Event) *ErrorEvent {
 	return nil
+}
+
+func (c *causedBy) isEmpty() bool {
+	return c.Exception == "" && c.Detail == ""
+}
+
+func extractCausedBy(line string) *causedBy {
+	parts := strings.Split(line, ":")
+	/*
+	 Parts should ideally contain the following at each index:
+	 0 -> Caused by:
+	 1 -> Exception
+	 2 -> Detail about exception
+	*/
+	c := new(causedBy)
+	c.Exception = strings.Trim(parts[1], " ")
+	if len(parts) == 3 {
+		c.Detail = strings.Trim(parts[2], " ")
+	}
+	if c.isEmpty() {
+		return nil
+	}
+	return c
 }
 
 func ContainsCausedBy(line string) bool {
