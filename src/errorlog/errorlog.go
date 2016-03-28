@@ -62,15 +62,35 @@ func ParseLogLine(line string) (*Event, error) {
 	return event, nil
 }
 
-func ParseCausedBy(line string, e *Event) *ErrorEvent {
-	return nil
+func ParseCausedBy(line string, e *Event) (*ErrorEvent, error) {
+	if e == nil {
+		return nil, errors.New("Cannot create ErrorEvent with nil event")
+	}
+	c, err := extractCausedBy(line)
+	if err != nil {
+		return nil, err
+	}
+	errorEvent := newErrorEvent(e, c)
+
+	return errorEvent, nil
+}
+
+func newErrorEvent(e *Event, c *causedBy) *ErrorEvent {
+	ee := new(ErrorEvent)
+	ee.Timestamp = e.Timestamp
+	ee.Level = e.Level
+	ee.Source = e.Source
+	ee.Description = e.Description
+	ee.Exception = c.Exception
+	ee.Detail = c.Detail
+	return ee
 }
 
 func (c *causedBy) isEmpty() bool {
 	return c.Exception == "" && c.Detail == ""
 }
 
-func extractCausedBy(line string) *causedBy {
+func extractCausedBy(line string) (*causedBy, error) {
 	parts := strings.Split(line, ":")
 	/*
 	 Parts should ideally contain the following at each index:
@@ -79,14 +99,17 @@ func extractCausedBy(line string) *causedBy {
 	 2 -> Detail about exception
 	*/
 	c := new(causedBy)
+	if len(parts) <= 1 {
+		return nil, errors.New("Not enough parts after split to determine Exception from: " + line)
+	}
 	c.Exception = strings.Trim(parts[1], " ")
 	if len(parts) == 3 {
 		c.Detail = strings.Trim(parts[2], " ")
 	}
 	if c.isEmpty() {
-		return nil
+		return nil, errors.New("No exception nor detail extracted from: " + line)
 	}
-	return c
+	return c, nil
 }
 
 func ContainsCausedBy(line string) bool {
