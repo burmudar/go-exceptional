@@ -9,9 +9,10 @@ import (
 	"github.com/hpcloud/tail"
 	_ "github.com/mattn/go-sqlite3"
 	"math"
+	"net/smtp"
 	"os"
-	"path"
-	"path/filepath"
+	_ "path"
+	_ "path/filepath"
 	"strings"
 	"time"
 )
@@ -22,59 +23,72 @@ var ErrNotCausedByLine error = errors.New("Line does not contain 'Caused by'")
 var ErrTableExists error = errors.New("Not creating Table. Table already exists")
 
 func main() {
-
-	files := []string{}
-	filepath.Walk("logs", func(p string, i os.FileInfo, err error) error {
-		if path.Ext(p) == ".log" {
-			files = append(files, p)
+	/*
+		files := []string{}
+		filepath.Walk("logs", func(p string, i os.FileInfo, err error) error {
+			if path.Ext(p) == ".log" {
+				files = append(files, p)
+			}
+			return nil
+		})
+		err := initDB()
+		if err != nil {
+			fmt.Printf("Failed initializing Database: [%v]\n", err)
+			return
+		} else {
+			fmt.Println("Database initiliazed")
 		}
-		return nil
-	})
-	err := initDB()
-	if err != nil {
-		fmt.Printf("Failed initializing Database: [%v]\n", err)
-		return
-	} else {
-		fmt.Println("Database initiliazed")
-	}
-	loadAll(files)
-	initStats()
-	var eventProcess chan errorlog.ErrorEvent = make(chan errorlog.ErrorEvent)
-	go func() {
-		var start time.Time = time.Now()
-		var statCache map[string]*StatItem = make(map[string]*StatItem)
-		for event := range eventProcess {
-			if isEventAfterStart(&start, &event) {
-				start = time.Now()
-				fmt.Println("Event is day after we started. Purging Stat cache")
-				statCache = make(map[string]*StatItem)
-				fmt.Println("Recalculating stats")
-				calcStats()
-			}
-			fmt.Printf("Processing: %v\n", event)
-			var statItem *StatItem
-			var ok bool
-			if statItem, ok = statCache[event.Exception]; !ok {
-				statItem = getStatItem(event.Exception)
-				statCache[event.Exception] = statItem
-			}
-			if statItem == nil {
-				notify(&event)
+		loadAll(files)
+		initStats()
+		var eventProcess chan errorlog.ErrorEvent = make(chan errorlog.ErrorEvent)
+		go processEventsFromChannel(eventProcess)
+		watchFile("test.log", eventProcess)
+	*/
+	initDB()
+	var e *errorlog.ErrorEvent = new(errorlog.ErrorEvent)
+	t := time.Now()
+	e.Timestamp = &t
+	e.Level = errorlog.ERROR_LOG_LEVEL
+	e.Source = "test"
+	e.Description = "test description"
+	e.Exception = "TestException"
+	e.Detail = "Some Detail"
+	notify(e, nil, nil)
+}
+
+func processEventsFromChannel(eventChan chan errorlog.ErrorEvent) {
+	var start time.Time = time.Now()
+	var statCache map[string]*StatItem = make(map[string]*StatItem)
+	for event := range eventChan {
+		if isEventAfterStart(&start, &event) {
+			start = time.Now()
+			fmt.Println("Event is day after we started. Purging Stat cache")
+			statCache = make(map[string]*StatItem)
+			fmt.Println("Recalculating stats")
+			calcStats()
+		}
+		fmt.Printf("Processing: %v\n", event)
+		var statItem *StatItem
+		var ok bool
+		if statItem, ok = statCache[event.Exception]; !ok {
+			statItem = getStatItem(event.Exception)
+			statCache[event.Exception] = statItem
+		}
+		if statItem == nil {
+			notify(&event, nil, nil)
+		} else {
+			fmt.Printf("Stats: %v\n", *statItem)
+			var s *Summary = getDaySummaryFor(&event)
+			fmt.Printf("Summary: %v\n", *s)
+			max := statItem.Mean + statItem.StdDev
+			fmt.Printf("Total[%v] : Max[%v]\n", s.Total, max)
+			if s.Total >= int(max) {
+				notify(&event, statItem, s)
 			} else {
-				fmt.Printf("Stats: %v\n", *statItem)
-				var s *Summary = getDaySummaryFor(&event)
-				fmt.Printf("Summary: %v\n", *s)
-				max := statItem.Mean + statItem.StdDev
-				fmt.Printf("Total[%v] : Max[%v]\n", s.Total, max)
-				if s.Total >= int(max) {
-					notify(&event)
-				} else {
-				}
 			}
-
 		}
-	}()
-	watchFile("test.log", eventProcess)
+
+	}
 }
 
 func isEventAfterStart(start *time.Time, event *errorlog.ErrorEvent) bool {
@@ -82,8 +96,49 @@ func isEventAfterStart(start *time.Time, event *errorlog.ErrorEvent) bool {
 	return start.Day()-event.Timestamp.Day() > 0
 }
 
-func notify(e *errorlog.ErrorEvent) {
-	fmt.Printf("NOTIFYING: [%v]\n", *e)
+func notify(e *errorlog.ErrorEvent, stat *StatItem, sum *Summary) {
+	if hasBeenNotifiedFor(e) {
+		fmt.Printf("Notification already sent for %v\n", *e)
+	}
+	from := "USERNAME"
+	pass := "PASSWORD"
+	to := "TO SOMEONE"
+	subject := ""
+	body := ""
+	if stat == nil && sum == nil {
+		subject = "Subject: " + fmt.Sprintf("New Error: %v", e.Exception)
+		body = fmt.Sprintf("New Error Event: [%v] - [%v] : [%v]\nCaused by: [%v] - [%v]\n", e.Timestamp, e.Source, e.Description, e.Exception, e.Detail)
+	} else {
+		subject = "Subject: " + fmt.Sprintf("Error exceeds Statistical Limit: %v", e.Exception)
+		body = fmt.Sprintf("Error Event: [%v] - [%v] : [%v]\nCaused by: [%v] - [%v]\n Seen today = %v\n Max = %v", e.Timestamp, e.Source, e.Description, e.Exception, e.Detail, sum.Total, stat.Mean+stat.StdDev)
+	}
+
+	msg := fmt.Sprintf("From: %v\nTo: %v\nSubject: %v\n\n%v", from, to, subject, body)
+	if err := smtp.SendMail("smtp.gmail.com:587", smtp.PlainAuth("", from, pass, "smtp.gmail.com"), from, []string{to}, []byte(msg)); err != nil {
+		fmt.Printf("Failed sending notification for [%v] : %v\n", *e, err)
+	} else {
+		notificationSent(e)
+	}
+
+}
+
+func notificationSent(e *errorlog.ErrorEvent) {
+	_, err := db.Exec("insert into notifications(created_at, exception) values(DATE(?), ?)", time.Now(), e.Exception)
+	if err != nil {
+		fmt.Println("Failed inserting record for notification sent for [%v]: %v\n", *e, err)
+	}
+
+}
+
+func hasBeenNotifiedFor(e *errorlog.ErrorEvent) bool {
+	r := db.QueryRow(`select count(*) from notifications where created_at = DATE(?) and exception = ?`, time.Now(), e.Exception)
+	var count int
+	err := r.Scan(&count)
+	if err != nil {
+		fmt.Printf("Failed mapping notification count: %v\n", err)
+		return true
+	}
+	return count > 0
 }
 
 func getStatItem(excp string) *StatItem {
@@ -320,6 +375,16 @@ func initDB() error {
 		unique(event_datetime, source, description)
 	)
 	`)
+	if err == ErrTableExists {
+		fmt.Printf("Database Initialize Error: [%v]\n", err)
+	}
+
+	table = "notifications"
+	err = createTable(table, `create table notifications(
+		id INTEGER not null primary key,
+		created_at DATETIME not null,
+		exception VARCHAR(255) not null,
+		unique(created_at, exception))`)
 	if err == ErrTableExists {
 		fmt.Printf("Database Initialize Error: [%v]\n", err)
 		return nil
