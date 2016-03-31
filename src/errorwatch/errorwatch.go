@@ -1,4 +1,4 @@
-package errorlog
+package errorwatch
 
 import (
 	"errors"

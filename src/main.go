@@ -3,8 +3,8 @@ package main
 import (
 	"bufio"
 	"database/sql"
-	"errorlog"
 	"errors"
+	"errorwatch"
 	"fmt"
 	"github.com/hpcloud/tail"
 	_ "github.com/mattn/go-sqlite3"
@@ -40,15 +40,15 @@ func main() {
 		}
 		loadAll(files)
 		initStats()
-		var eventProcess chan errorlog.ErrorEvent = make(chan errorlog.ErrorEvent)
+		var eventProcess chan errorwatch.ErrorEvent = make(chan errorwatch.ErrorEvent)
 		go processEventsFromChannel(eventProcess)
 		watchFile("test.log", eventProcess)
 	*/
 	initDB()
-	var e *errorlog.ErrorEvent = new(errorlog.ErrorEvent)
+	var e *errorwatch.ErrorEvent = new(errorwatch.ErrorEvent)
 	t := time.Now()
 	e.Timestamp = &t
-	e.Level = errorlog.ERROR_LOG_LEVEL
+	e.Level = errorwatch.ERROR_LOG_LEVEL
 	e.Source = "test"
 	e.Description = "test description"
 	e.Exception = "TestException"
@@ -56,7 +56,7 @@ func main() {
 	notify(e, nil, nil)
 }
 
-func processEventsFromChannel(eventChan chan errorlog.ErrorEvent) {
+func processEventsFromChannel(eventChan chan errorwatch.ErrorEvent) {
 	var start time.Time = time.Now()
 	var statCache map[string]*StatItem = make(map[string]*StatItem)
 	for event := range eventChan {
@@ -91,12 +91,12 @@ func processEventsFromChannel(eventChan chan errorlog.ErrorEvent) {
 	}
 }
 
-func isEventAfterStart(start *time.Time, event *errorlog.ErrorEvent) bool {
+func isEventAfterStart(start *time.Time, event *errorwatch.ErrorEvent) bool {
 	fmt.Printf("%v : %v", start.Day(), event.Timestamp.Day())
 	return start.Day()-event.Timestamp.Day() > 0
 }
 
-func notify(e *errorlog.ErrorEvent, stat *StatItem, sum *Summary) {
+func notify(e *errorwatch.ErrorEvent, stat *StatItem, sum *Summary) {
 	if hasBeenNotifiedFor(e) {
 		fmt.Printf("Notification already sent for %v\n", *e)
 	}
@@ -122,7 +122,7 @@ func notify(e *errorlog.ErrorEvent, stat *StatItem, sum *Summary) {
 
 }
 
-func notificationSent(e *errorlog.ErrorEvent) {
+func notificationSent(e *errorwatch.ErrorEvent) {
 	_, err := db.Exec("insert into notifications(created_at, exception) values(DATE(?), ?)", time.Now(), e.Exception)
 	if err != nil {
 		fmt.Println("Failed inserting record for notification sent for [%v]: %v\n", *e, err)
@@ -130,7 +130,7 @@ func notificationSent(e *errorlog.ErrorEvent) {
 
 }
 
-func hasBeenNotifiedFor(e *errorlog.ErrorEvent) bool {
+func hasBeenNotifiedFor(e *errorwatch.ErrorEvent) bool {
 	r := db.QueryRow(`select count(*) from notifications where created_at = DATE(?) and exception = ?`, time.Now(), e.Exception)
 	var count int
 	err := r.Scan(&count)
@@ -215,7 +215,7 @@ func calcStats() {
 }
 
 func insertOrUpdateErrorStat(s *StatItem) error {
-	var date = s.ModifiedAt.Format(errorlog.DATE_FORMAT)
+	var date = s.ModifiedAt.Format(errorwatch.DATE_FORMAT)
 	_, err := db.Exec(`insert into error_stats(exception, mean, variance, std_dev, total_errs, day_count, modified_at) values (?, ?, ?, ?, ?, ?, ?)`,
 		&s.Exception, &s.Mean, &s.Variance, &s.StdDev, &s.TotalErrors, &s.DayCount, &date)
 	if err != nil {
@@ -268,7 +268,7 @@ func toDate(date string) (time.Time, error) {
 	return time.Parse("2006-01-02", date)
 }
 
-func getDaySummaryFor(event *errorlog.ErrorEvent) *Summary {
+func getDaySummaryFor(event *errorwatch.ErrorEvent) *Summary {
 	s := new(Summary)
 	var tempDate string
 	/*
@@ -404,14 +404,14 @@ func hasTable(name string) bool {
 
 }
 
-func watchFile(path string, errorProcess chan errorlog.ErrorEvent) {
+func watchFile(path string, errorProcess chan errorwatch.ErrorEvent) {
 	t, _ := tail.TailFile(path, tail.Config{Follow: true, ReOpen: true})
-	var event *errorlog.Event = nil
+	var event *errorwatch.Event = nil
 	fmt.Printf("Tailing file: %v\n", path)
 	for l := range t.Lines {
 		line := l.Text
 		fmt.Printf("Tail: %v\n", line)
-		e, err := errorlog.ParseLogLine(line)
+		e, err := errorwatch.ParseLogLine(line)
 		if err != nil {
 			fmt.Errorf("Failed parsing: %v\n", err)
 		} else {
@@ -425,9 +425,9 @@ func watchFile(path string, errorProcess chan errorlog.ErrorEvent) {
 	}
 }
 
-func processEventIfIsCausedByLine(line string, event *errorlog.Event) (*errorlog.ErrorEvent, error) {
-	if errorlog.ContainsCausedBy(line) {
-		errorEvent, err := errorlog.ParseCausedBy(line, event)
+func processEventIfIsCausedByLine(line string, event *errorwatch.Event) (*errorwatch.ErrorEvent, error) {
+	if errorwatch.ContainsCausedBy(line) {
+		errorEvent, err := errorwatch.ParseCausedBy(line, event)
 		if err != nil {
 			return nil, err
 		} else {
@@ -442,7 +442,7 @@ func processEventIfIsCausedByLine(line string, event *errorlog.Event) (*errorlog
 	return nil, ErrNotCausedByLine
 }
 
-func addToDB(errorEvent *errorlog.ErrorEvent) error {
+func addToDB(errorEvent *errorwatch.ErrorEvent) error {
 	var count int
 	db.QueryRow(`select count(id) from error_events where event_datetime=? AND source=? AND description=? AND exception=? AND excp_description=?`,
 		errorEvent.Timestamp, errorEvent.Source, errorEvent.Description, errorEvent.Exception, errorEvent.Description).Scan(&count)
@@ -459,10 +459,10 @@ func addToDB(errorEvent *errorlog.ErrorEvent) error {
 }
 
 func readLogFile(scanner *bufio.Scanner) {
-	var event *errorlog.Event = nil
+	var event *errorwatch.Event = nil
 	for scanner.Scan() {
 		line := scanner.Text()
-		e, err := errorlog.ParseLogLine(line)
+		e, err := errorwatch.ParseLogLine(line)
 		if err != nil {
 			fmt.Errorf("Failed parsing: %v\n", err)
 		} else {
