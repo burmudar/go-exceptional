@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"database/sql"
 	"errors"
 	"errorwatch"
 	"fmt"
@@ -13,14 +12,12 @@ import (
 	"os"
 	_ "path"
 	_ "path/filepath"
-	"strings"
 	"time"
 )
 
-var db *sql.DB
+var errorStore *errorwatch.ErrorWatchStore
 
 var ErrNotCausedByLine error = errors.New("Line does not contain 'Caused by'")
-var ErrTableExists error = errors.New("Not creating Table. Table already exists")
 
 func main() {
 	/*
@@ -44,7 +41,7 @@ func main() {
 		go processEventsFromChannel(eventProcess)
 		watchFile("test.log", eventProcess)
 	*/
-	initDB()
+	errorStore := errorwatch.NewErrorWatchStore()
 	var e *errorwatch.ErrorEvent = new(errorwatch.ErrorEvent)
 	t := time.Now()
 	e.Timestamp = &t
@@ -58,17 +55,17 @@ func main() {
 
 func processEventsFromChannel(eventChan chan errorwatch.ErrorEvent) {
 	var start time.Time = time.Now()
-	var statCache map[string]*StatItem = make(map[string]*StatItem)
+	var statCache map[string]*errorwatch.StatItem = make(map[string]*errorwatch.StatItem)
 	for event := range eventChan {
 		if isEventAfterStart(&start, &event) {
 			start = time.Now()
 			fmt.Println("Event is day after we started. Purging Stat cache")
-			statCache = make(map[string]*StatItem)
+			statCache = make(map[string]*errorwatch.StatItem)
 			fmt.Println("Recalculating stats")
 			calcStats()
 		}
 		fmt.Printf("Processing: %v\n", event)
-		var statItem *StatItem
+		var statItem *errorwatch.StatItem
 		var ok bool
 		if statItem, ok = statCache[event.Exception]; !ok {
 			statItem = getStatItem(event.Exception)
@@ -78,8 +75,8 @@ func processEventsFromChannel(eventChan chan errorwatch.ErrorEvent) {
 			notify(&event, nil, nil)
 		} else {
 			fmt.Printf("Stats: %v\n", *statItem)
-			var s *Summary = getDaySummaryFor(&event)
-			fmt.Printf("Summary: %v\n", *s)
+			var s *errorwatch.Summary = getDaySummaryFor(&event)
+			fmt.Printf("errorwatch.Summary: %v\n", *s)
 			max := statItem.Mean + statItem.StdDev
 			fmt.Printf("Total[%v] : Max[%v]\n", s.Total, max)
 			if s.Total >= int(max) {
@@ -96,7 +93,7 @@ func isEventAfterStart(start *time.Time, event *errorwatch.ErrorEvent) bool {
 	return start.Day()-event.Timestamp.Day() > 0
 }
 
-func notify(e *errorwatch.ErrorEvent, stat *StatItem, sum *Summary) {
+func notify(e *errorwatch.ErrorEvent, stat *errorwatch.StatItem, sum *errorwatch.Summary) {
 	if hasBeenNotifiedFor(e) {
 		fmt.Printf("Notification already sent for %v\n", *e)
 	}
@@ -141,9 +138,9 @@ func hasBeenNotifiedFor(e *errorwatch.ErrorEvent) bool {
 	return count > 0
 }
 
-func getStatItem(excp string) *StatItem {
+func getStatItem(excp string) *errorwatch.StatItem {
 	r := db.QueryRow(`select exception, mean, variance, std_dev, total_errs, day_count, modified_at from error_stats where exception = ?`, excp)
-	i := new(StatItem)
+	i := new(errorwatch.StatItem)
 	var tempDate string
 	err := r.Scan(&i.Exception, &i.Mean, &i.Variance, &i.StdDev, &i.TotalErrors, &i.DayCount, &tempDate)
 	if err != nil {
@@ -170,32 +167,14 @@ func initStats() {
 
 	calcStats()
 }
-
-type Summary struct {
-	Id        int
-	Date      time.Time
-	Exception string
-	Total     int
-}
-
-type StatItem struct {
-	Exception   string
-	Mean        float64
-	Variance    int
-	StdDev      float64
-	TotalErrors int
-	DayCount    int
-	ModifiedAt  *time.Time
-}
-
 func calcStats() {
 	summaries := fetchDaySummaries()
-	var statMap map[string][]Summary = make(map[string][]Summary)
+	var statMap map[string][]errorwatch.Summary = make(map[string][]errorwatch.Summary)
 	for _, s := range summaries {
 		if item, ok := statMap[s.Exception]; ok {
 			statMap[s.Exception] = append(item, s)
 		} else {
-			statMap[s.Exception] = append([]Summary{}, s)
+			statMap[s.Exception] = append([]errorwatch.Summary{}, s)
 		}
 	}
 	for k, v := range statMap {
@@ -204,32 +183,17 @@ func calcStats() {
 		variance := calcVariance(v, avg)
 		stdDev := math.Sqrt(float64(variance))
 		now := time.Now()
-		statItem := StatItem{k, avg, variance, stdDev, total, len(v), &now}
+		statItem := errorwatch.StatItem{k, avg, variance, stdDev, total, len(v), &now}
 		err := insertOrUpdateErrorStat(&statItem)
 		if err != nil {
 			fmt.Printf("Failed inserting Stat Item for: [%v] : %v\n", k, err)
 		} else {
-			fmt.Printf("Inserted StatItem for -> %v\n", k)
+			fmt.Printf("Inserted errorwatch.StatItem for -> %v\n", k)
 		}
 	}
 }
 
-func insertOrUpdateErrorStat(s *StatItem) error {
-	var date = s.ModifiedAt.Format(errorwatch.DATE_FORMAT)
-	_, err := db.Exec(`insert into error_stats(exception, mean, variance, std_dev, total_errs, day_count, modified_at) values (?, ?, ?, ?, ?, ?, ?)`,
-		&s.Exception, &s.Mean, &s.Variance, &s.StdDev, &s.TotalErrors, &s.DayCount, &date)
-	if err != nil {
-		fmt.Println("Assuming insert failed because record already exists trying UPDATE")
-		_, err := db.Exec(`UPDATE error_stats SET mean = ?, variance = ?, std_dev = ?, total_errs = ?, day_count = ?, modified_at = ? WHERE exception = ?`,
-			&s.Mean, &s.Variance, &s.StdDev, &s.TotalErrors, &s.DayCount, &date, &s.Exception)
-		if err != nil {
-			fmt.Println("Failed UPDATING DB with [%v] : %v\n", *s, err)
-		}
-	}
-	return err
-}
-
-func calcTotal(summaries []Summary) int {
+func calcTotal(summaries []errorwatch.Summary) int {
 	var total int
 	for _, s := range summaries {
 		total += s.Total
@@ -237,110 +201,13 @@ func calcTotal(summaries []Summary) int {
 	return total
 }
 
-func calcVariance(summaries []Summary, avg float64) int {
+func calcVariance(summaries []errorwatch.Summary, avg float64) int {
 	var variance int
 	for _, s := range summaries {
 		diff := float64(s.Total) - avg
 		variance += int(math.Pow(diff, 2))
 	}
 	return variance / len(summaries)
-}
-
-func fetchDaySummaries() []Summary {
-	var summaries []Summary
-	rows, err := db.Query("select * from error_day_summary")
-	if err != nil {
-		return summaries
-	}
-	for rows.Next() {
-		var s Summary
-		rows.Scan(&s.Id, &s.Date, &s.Exception, &s.Total)
-		summaries = append(summaries, s)
-	}
-	return summaries
-}
-
-func toDateTime(date string) (time.Time, error) {
-	return time.Parse(time.RFC3339Nano, date)
-}
-
-func toDate(date string) (time.Time, error) {
-	return time.Parse("2006-01-02", date)
-}
-
-func getDaySummaryFor(event *errorwatch.ErrorEvent) *Summary {
-	s := new(Summary)
-	var tempDate string
-	/*
-		Scan into tempDate string since Scan can't automatically figure out the Date format. So we scan to a string and parse the string with a known date layout
-	*/
-	err := db.QueryRow("select DATE(event_datetime) as error_date, exception, count(exception) as total from error_events where error_date = DATE(?) group by DATE(error_date), exception",
-		event.Timestamp).Scan(&tempDate, &s.Exception, &s.Total)
-	if err != nil {
-		fmt.Printf("Failed to map Day Summary for [%v] : %v\n", *event, err)
-	}
-	date, err := toDate(tempDate)
-	if err != nil {
-		fmt.Printf("Unknown Date format: %v", tempDate)
-	}
-	s.Date = date
-	return s
-}
-
-func updateErrorDaySummaries() error {
-	_, err := db.Exec(`
-		insert or ignore into error_day_summary(error_date, exception, total) select DATE(event_datetime) as error_date, exception, count(exception) as total from error_events group by DATE(error_date), exception
-	`)
-	return err
-}
-
-func createTable(table string, sql string) error {
-	var err error
-	if hasTable(table) {
-		return ErrTableExists
-	} else {
-		_, err = db.Exec(sql)
-		return err
-	}
-}
-
-func createStatsDBStructure() error {
-	var err error
-	table := "error_day_summary"
-	err = createTable(table, `
-	create table error_day_summary(
-		id INTEGER not null primary key,
-		error_date DATETIME not null,
-		exception VARCHAR(255) not null,
-		total INTEGER not null,
-		unique(error_date, exception)
-	)
-	`)
-	if err != nil {
-		fmt.Printf("Error creating table: [%v]\n", table)
-	} else {
-		fmt.Printf("Created Table: [%v]\n", table)
-	}
-	table = "error_stats"
-	err = createTable(table, `
-	create table error_stats (
-		id INTEGER not null primary key, 
-		exception VARCHAR(255),
-		mean DOUBLE not null,
-		variance INTEGER not null,
-		std_dev DOUBLE not null,
-		total_errs INTEGER not null,
-		day_count INTEGER not null,
-		modified_at DATETIME not null,
-		unique(exception)
-	)
-	`)
-	if err != nil {
-		fmt.Printf("Error creating table: [%v]\n", table)
-	} else {
-		fmt.Printf("Created Table: [%v]\n", table)
-	}
-	return err
 }
 
 func loadAll(files []string) {
@@ -355,53 +222,6 @@ func loadAll(files []string) {
 		scanner := bufio.NewScanner(file)
 		readLogFile(scanner)
 	}
-}
-
-func initDB() error {
-	var err error
-	db, err = sql.Open("sqlite3", "errors.db")
-	if err != nil {
-		return nil
-	}
-	table := "error_events"
-	err = createTable(table, `create table error_events(
-		id INTEGER not null primary key,
-		event_datetime DATETIME not null,
-		level VARCHAR(10) not null,
-		source VARCHAR(30) not null,
-		description VARCHAR(255) not null,
-		exception VARCHAR(255) not null,
-		excp_description VARCHAR(255) not null,
-		unique(event_datetime, source, description)
-	)
-	`)
-	if err == ErrTableExists {
-		fmt.Printf("Database Initialize Error: [%v]\n", err)
-	}
-
-	table = "notifications"
-	err = createTable(table, `create table notifications(
-		id INTEGER not null primary key,
-		created_at DATETIME not null,
-		exception VARCHAR(255) not null,
-		unique(created_at, exception))`)
-	if err == ErrTableExists {
-		fmt.Printf("Database Initialize Error: [%v]\n", err)
-		return nil
-	}
-	return err
-}
-
-func hasTable(name string) bool {
-	var table string
-	err := db.QueryRow("select name FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&table)
-	table = strings.Trim(table, " ")
-	if err == sql.ErrNoRows || table == "" {
-		return false
-	} else {
-		return true
-	}
-
 }
 
 func watchFile(path string, errorProcess chan errorwatch.ErrorEvent) {
@@ -441,23 +261,6 @@ func processEventIfIsCausedByLine(line string, event *errorwatch.Event) (*errorw
 	}
 	return nil, ErrNotCausedByLine
 }
-
-func addToDB(errorEvent *errorwatch.ErrorEvent) error {
-	var count int
-	db.QueryRow(`select count(id) from error_events where event_datetime=? AND source=? AND description=? AND exception=? AND excp_description=?`,
-		errorEvent.Timestamp, errorEvent.Source, errorEvent.Description, errorEvent.Exception, errorEvent.Description).Scan(&count)
-	if count > 0 {
-		fmt.Printf("[%v : %v] Already exists!\n", *errorEvent.Timestamp, errorEvent.Exception)
-		return nil
-	}
-	_, err := db.Exec(`insert into error_events(event_datetime, level, source, description, exception, excp_description) 
-	values (?, ?, ?, ?, ?, ?)`, errorEvent.Timestamp, string(errorEvent.Level), errorEvent.Source, errorEvent.Description, errorEvent.Exception, errorEvent.Description)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func readLogFile(scanner *bufio.Scanner) {
 	var event *errorwatch.Event = nil
 	for scanner.Scan() {
