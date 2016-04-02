@@ -51,25 +51,86 @@ const SQL_TABLE_ERROR_DAY_SUMMARY string = `
 
 var ErrTableExists error = errors.New("Not creating Table. Table already exists")
 
+type Store interface {
+	Init() []error
+	Errors() ErrorWatchStore
+	Stats() StatStore
+	Notifications() NotifyStore
+}
+
 type ErrorWatchStore interface {
+	AddErrorEvent(e *ErrorEvent) error
+}
+
+type StatStore interface {
+	GetStatItem(excp string) *StatItem
 	InsertOrUpdateStatItem(s *StatItem) error
 	FetchDaySummaries() []Summary
 	GetDaySummary(e *ErrorEvent) *Summary
 	UpdateDaySummaries() error
-	AddErrorEvent(e *ErrorEvent) error
+}
+
+type NotifyStore interface {
+	UpdateNotificationSent(e *ErrorEvent) error
+	HasNotification(e *ErrorEvent) bool
 }
 
 type dbStore struct {
 	db *sql.DB
 }
 
-func NewErrorWatchStore() ErrorWatchStore {
+func NewStore() Store {
+	s := new(dbStore)
+	return s
+}
+
+func (s *dbStore) Init() []error {
 	db, errors := initDB()
-	if len(errors) != 0 {
-		log.Panicf("Failed initializing database: %v\n", errors)
+	s.db = db
+	return errors
+}
+
+func (s *dbStore) Errors() ErrorWatchStore {
+	return s
+}
+
+func (s *dbStore) Notifications() NotifyStore {
+	return s
+}
+func (s *dbStore) Stats() StatStore {
+	return s
+}
+
+func (s *dbStore) UpdateNotificationSent(e *ErrorEvent) error {
+	_, err := s.db.Exec("insert into notifications(created_at, exception) values(DATE(?), ?)", time.Now(), e.Exception)
+	return err
+}
+
+func (s *dbStore) HasNotification(e *ErrorEvent) bool {
+	r := s.db.QueryRow(`select count(*) from notifications where created_at = DATE(?) and exception = ?`, time.Now(), e.Exception)
+	var count int
+	err := r.Scan(&count)
+	if err != nil {
+		log.Printf("Failed mapping notification count: %v\n", err)
+		return true
 	}
-	dbStore := &dbStore{db}
-	return dbStore
+	return count > 0
+}
+
+func (store *dbStore) GetStatItem(excp string) *StatItem {
+	r := store.db.QueryRow(`select exception, mean, variance, std_dev, total_errs, day_count, modified_at from error_stats where exception = ?`, excp)
+	i := new(StatItem)
+	var tempDate string
+	err := r.Scan(&i.Exception, &i.Mean, &i.Variance, &i.StdDev, &i.TotalErrors, &i.DayCount, &tempDate)
+	if err != nil {
+		log.Printf("Failed mapping stat item: %v\n", err)
+	}
+	date, err := toDateTime(tempDate)
+	i.ModifiedAt = &date
+	if err != nil {
+		log.Printf("Failed parsing date: %v : %v\n", tempDate, err)
+	}
+	return i
 }
 
 func (store *dbStore) InsertOrUpdateStatItem(s *StatItem) error {

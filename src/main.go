@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-var errorStore *errorwatch.ErrorWatchStore
+var store errorwatch.Store
 
 var ErrNotCausedByLine error = errors.New("Line does not contain 'Caused by'")
 
@@ -41,7 +41,8 @@ func main() {
 		go processEventsFromChannel(eventProcess)
 		watchFile("test.log", eventProcess)
 	*/
-	errorStore := errorwatch.NewErrorWatchStore()
+	store := errorwatch.NewStore()
+	store.Init()
 	var e *errorwatch.ErrorEvent = new(errorwatch.ErrorEvent)
 	t := time.Now()
 	e.Timestamp = &t
@@ -68,14 +69,14 @@ func processEventsFromChannel(eventChan chan errorwatch.ErrorEvent) {
 		var statItem *errorwatch.StatItem
 		var ok bool
 		if statItem, ok = statCache[event.Exception]; !ok {
-			statItem = getStatItem(event.Exception)
+			statItem = store.Stats().GetStatItem(event.Exception)
 			statCache[event.Exception] = statItem
 		}
 		if statItem == nil {
 			notify(&event, nil, nil)
 		} else {
 			fmt.Printf("Stats: %v\n", *statItem)
-			var s *errorwatch.Summary = getDaySummaryFor(&event)
+			var s *errorwatch.Summary = store.Stats().GetDaySummary(&event)
 			fmt.Printf("errorwatch.Summary: %v\n", *s)
 			max := statItem.Mean + statItem.StdDev
 			fmt.Printf("Total[%v] : Max[%v]\n", s.Total, max)
@@ -94,7 +95,7 @@ func isEventAfterStart(start *time.Time, event *errorwatch.ErrorEvent) bool {
 }
 
 func notify(e *errorwatch.ErrorEvent, stat *errorwatch.StatItem, sum *errorwatch.Summary) {
-	if hasBeenNotifiedFor(e) {
+	if store.Notifications().HasNotification(e) {
 		fmt.Printf("Notification already sent for %v\n", *e)
 	}
 	from := "USERNAME"
@@ -114,52 +115,13 @@ func notify(e *errorwatch.ErrorEvent, stat *errorwatch.StatItem, sum *errorwatch
 	if err := smtp.SendMail("smtp.gmail.com:587", smtp.PlainAuth("", from, pass, "smtp.gmail.com"), from, []string{to}, []byte(msg)); err != nil {
 		fmt.Printf("Failed sending notification for [%v] : %v\n", *e, err)
 	} else {
-		notificationSent(e)
+		store.Notifications().UpdateNotificationSent(e)
 	}
 
-}
-
-func notificationSent(e *errorwatch.ErrorEvent) {
-	_, err := db.Exec("insert into notifications(created_at, exception) values(DATE(?), ?)", time.Now(), e.Exception)
-	if err != nil {
-		fmt.Println("Failed inserting record for notification sent for [%v]: %v\n", *e, err)
-	}
-
-}
-
-func hasBeenNotifiedFor(e *errorwatch.ErrorEvent) bool {
-	r := db.QueryRow(`select count(*) from notifications where created_at = DATE(?) and exception = ?`, time.Now(), e.Exception)
-	var count int
-	err := r.Scan(&count)
-	if err != nil {
-		fmt.Printf("Failed mapping notification count: %v\n", err)
-		return true
-	}
-	return count > 0
-}
-
-func getStatItem(excp string) *errorwatch.StatItem {
-	r := db.QueryRow(`select exception, mean, variance, std_dev, total_errs, day_count, modified_at from error_stats where exception = ?`, excp)
-	i := new(errorwatch.StatItem)
-	var tempDate string
-	err := r.Scan(&i.Exception, &i.Mean, &i.Variance, &i.StdDev, &i.TotalErrors, &i.DayCount, &tempDate)
-	if err != nil {
-		fmt.Printf("Failed mapping stat item: %v\n", err)
-	}
-	date, err := toDateTime(tempDate)
-	i.ModifiedAt = &date
-	if err != nil {
-		fmt.Printf("Failed parsing date: %v : %v\n", tempDate, err)
-	}
-	return i
 }
 
 func initStats() {
-	err := createStatsDBStructure()
-	if err != nil {
-		fmt.Printf("Failed initializing Stats DB structure: [%v]\n", err)
-	}
-	err = updateErrorDaySummaries()
+	err := store.Stats().UpdateDaySummaries()
 	if err != nil {
 		fmt.Printf("Failed loading Day Summaries: [%v]\n", err)
 	}
@@ -168,7 +130,7 @@ func initStats() {
 	calcStats()
 }
 func calcStats() {
-	summaries := fetchDaySummaries()
+	summaries := store.Stats().FetchDaySummaries()
 	var statMap map[string][]errorwatch.Summary = make(map[string][]errorwatch.Summary)
 	for _, s := range summaries {
 		if item, ok := statMap[s.Exception]; ok {
@@ -184,7 +146,7 @@ func calcStats() {
 		stdDev := math.Sqrt(float64(variance))
 		now := time.Now()
 		statItem := errorwatch.StatItem{k, avg, variance, stdDev, total, len(v), &now}
-		err := insertOrUpdateErrorStat(&statItem)
+		err := store.Stats().InsertOrUpdateStatItem(&statItem)
 		if err != nil {
 			fmt.Printf("Failed inserting Stat Item for: [%v] : %v\n", k, err)
 		} else {
@@ -251,7 +213,7 @@ func processEventIfIsCausedByLine(line string, event *errorwatch.Event) (*errorw
 		if err != nil {
 			return nil, err
 		} else {
-			err = addToDB(errorEvent)
+			err = store.Errors().AddErrorEvent(errorEvent)
 			if err != nil {
 				return nil, err
 			} else {
