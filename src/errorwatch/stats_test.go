@@ -29,6 +29,15 @@ func TestStatCacheShouldResetIsTrueWhenEventIsPastStart(t *testing.T) {
 	}
 }
 
+func TestCreateTimeAtStartOfToday(t *testing.T) {
+	start := createTimeAtStartOfToday()
+
+	if start.Hour() != 0 || start.Minute() != 0 || start.Second() != 0 || start.Nanosecond() != 0 {
+		t.Errorf("Start Time should be at Start of day")
+	}
+
+}
+
 func newTime(y, m, d, h, mm, s int) *time.Time {
 	temp := time.Date(y, time.Month(m), d, h, mm, s, 0, time.Local)
 	return &temp

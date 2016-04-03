@@ -133,10 +133,14 @@ func (c *statCache) reset() {
 }
 
 func initStartAndMap() (*time.Time, map[string]*StatItem) {
-	var now time.Time = time.Now()
 	m := make(map[string]*StatItem)
-	return &now, m
+	return createTimeAtStartOfToday(), m
+}
 
+func createTimeAtStartOfToday() *time.Time {
+	now := time.Now()
+	var start time.Time = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return &start
 }
 
 func (c *statCache) get(event *ErrorEvent) *StatItem {
