@@ -124,7 +124,7 @@ func createStatCache(engine StatEngine) *statCache {
 }
 
 func (c *statCache) shouldReset(event *ErrorEvent) bool {
-	return c.start.Day()-event.Timestamp.Day() > 0
+	return event.Timestamp.Sub(*c.start).Hours() >= 24
 }
 
 func (c *statCache) reset() {
