@@ -4,88 +4,107 @@ import (
 	"bufio"
 	"errors"
 	"errorwatch"
+	"flag"
 	"fmt"
 	"github.com/hpcloud/tail"
 	_ "github.com/mattn/go-sqlite3"
-	"math"
-	"net/smtp"
+	"log"
 	"os"
-	_ "path"
-	_ "path/filepath"
-	"time"
+	"path"
+	"path/filepath"
 )
 
 var store errorwatch.Store
 
 var ErrNotCausedByLine error = errors.New("Line does not contain 'Caused by'")
 
-func main() {
-	/*
-		files := []string{}
-		filepath.Walk("logs", func(p string, i os.FileInfo, err error) error {
-			if path.Ext(p) == ".log" {
-				files = append(files, p)
-			}
-			return nil
-		})
-		err := initDB()
-		if err != nil {
-			fmt.Printf("Failed initializing Database: [%v]\n", err)
-			return
-		} else {
-			fmt.Println("Database initiliazed")
-		}
-		loadAll(files)
-		initStats()
-		var eventProcess chan errorwatch.ErrorEvent = make(chan errorwatch.ErrorEvent)
-		go processEventsFromChannel(eventProcess)
-		watchFile("test.log", eventProcess)
-	*/
-	store := errorwatch.NewStore()
-	store.Init()
-	var e *errorwatch.ErrorEvent = new(errorwatch.ErrorEvent)
-	t := time.Now()
-	e.Timestamp = &t
-	e.Level = errorwatch.ERROR_LOG_LEVEL
-	e.Source = "test"
-	e.Description = "test description"
-	e.Exception = "TestException"
-	e.Detail = "Some Detail"
-	notify(e, nil, nil)
+var oldLogsPath = ""
+var tailPath = ""
+
+func init() {
+	flag.StringVar(&oldLogsPath, "oldLogs", "logs", "Directory where old .log files are stored and need to be parsed")
+	flag.StringVar(&tailPath, "tailFile", "test.log", "location of file to tail and watch")
 }
 
+func main() {
+	flag.Parse()
+	fmt.Println("Starting Error Watcher")
+	defer fmt.Println("Error Watcher exiting")
+
+	if tailPath == "" {
+		log.Fatalf("No File given to Tail and watch")
+	}
+	store = errorwatch.NewStore()
+	errs := store.Init()
+	if len(errs) > 0 {
+		log.Printf("Failed initializing Database: [%v]\n", errs)
+		return
+	} else {
+		log.Println("Database initiliazed")
+	}
+	loadAll(findAllFilesToParse(oldLogsPath))
+	statEngine := errorwatch.NewStatEngine(store)
+	err := statEngine.Init()
+	if err != nil {
+		log.Printf("Stat Engine failed to initialize: %v\n", err)
+		return
+	} else {
+		log.Printf("Stat Engine initialized")
+	}
+	notifier := errorwatch.NewConsoleNotifier(store.Notifications())
+	var eventProcess chan errorwatch.ErrorEvent = make(chan errorwatch.ErrorEvent)
+	go statEngine.ListenOn(eventProcess, notifier)
+	watchFile(tailPath, eventProcess)
+}
+
+func findAllFilesToParse(dir string) []string {
+	files := []string{}
+	if dir == "" {
+		log.Printf("No Old logs directory given to parse. Returning empty array of files to parse")
+		return files
+	}
+	filepath.Walk(dir, func(p string, i os.FileInfo, err error) error {
+		if path.Ext(p) == ".log" {
+			files = append(files, p)
+		}
+		return nil
+	})
+	return files
+}
 func notify(e *errorwatch.ErrorEvent, stat *errorwatch.StatItem, sum *errorwatch.Summary) {
 
 }
 
 func loadAll(files []string) {
-	fmt.Printf("Files: %v\n", files)
+	if len(files) == 0 {
+		log.Printf("Empty list of files received. Not loading any files")
+	}
 	for _, filePath := range files {
-		fmt.Printf("Loading File: %v\n", filePath)
+		log.Printf("Loading File: %v\n", filePath)
 		file, err := os.Open(filePath)
 		defer file.Close()
 		if err != nil {
-			fmt.Errorf("Error occured while opening '%v' for reading. Error: %v", "simcontrol.log", err)
+			log.Printf("Error occured while opening '%v' for reading. Error: %v", "simcontrol.log", err)
+			continue
 		}
-		scanner := bufio.NewScanner(file)
-		readLogFile(scanner)
+		readLogFile(file)
 	}
 }
 
 func watchFile(path string, errorProcess chan errorwatch.ErrorEvent) {
 	t, _ := tail.TailFile(path, tail.Config{Follow: true, ReOpen: true})
 	var event *errorwatch.Event = nil
-	fmt.Printf("Tailing file: %v\n", path)
+	log.Printf("Tailing file: %v\n", path)
 	for l := range t.Lines {
 		line := l.Text
-		fmt.Printf("Tail: %v\n", line)
+		log.Printf("Tail: %v\n", line)
 		e, err := errorwatch.ParseLogLine(line)
 		if err != nil {
-			fmt.Errorf("Failed parsing: %v\n", err)
+			log.Printf("Failed parsing: %v\n", err)
 		} else {
 			event = e
 		}
-		errorEvent, err := processEventIfIsCausedByLine(line, event)
+		errorEvent, err := addEventIfIsCausedByLine(line, event)
 		if errorEvent != nil {
 			errorProcess <- *errorEvent
 			event = nil
@@ -93,7 +112,7 @@ func watchFile(path string, errorProcess chan errorwatch.ErrorEvent) {
 	}
 }
 
-func processEventIfIsCausedByLine(line string, event *errorwatch.Event) (*errorwatch.ErrorEvent, error) {
+func addEventIfIsCausedByLine(line string, event *errorwatch.Event) (*errorwatch.ErrorEvent, error) {
 	if errorwatch.ContainsCausedBy(line) {
 		errorEvent, err := errorwatch.ParseCausedBy(line, event)
 		if err != nil {
@@ -109,19 +128,26 @@ func processEventIfIsCausedByLine(line string, event *errorwatch.Event) (*errorw
 	}
 	return nil, ErrNotCausedByLine
 }
-func readLogFile(scanner *bufio.Scanner) {
+func readLogFile(file *os.File) {
+	scanner := bufio.NewScanner(file)
 	var event *errorwatch.Event = nil
+	count := 0
+	insert := 0
+	failed := 0
 	for scanner.Scan() {
 		line := scanner.Text()
+		count++
 		e, err := errorwatch.ParseLogLine(line)
 		if err != nil {
-			fmt.Errorf("Failed parsing: %v\n", err)
+			failed++
 		} else {
 			event = e
 		}
-		errorEvent, err := processEventIfIsCausedByLine(line, event)
+		errorEvent, err := addEventIfIsCausedByLine(line, event)
 		if errorEvent != nil {
+			insert++
 			event = nil
 		}
 	}
+	log.Printf("Finished parsing [%v]: Lines=%v Failed: %v Inserted Error Events: %v\n", file.Name(), count, failed, insert)
 }

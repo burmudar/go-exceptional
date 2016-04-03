@@ -190,6 +190,7 @@ func (store *dbStore) UpdateDaySummaries() error {
 
 func (store *dbStore) AddErrorEvent(e *ErrorEvent) error {
 	var count int
+	log.Printf("Inserting: %v\n", *e)
 	store.db.QueryRow(`select count(id) from error_events where event_datetime=? AND source=? AND description=? AND exception=? AND excp_description=?`,
 		e.Timestamp, e.Source, e.Description, e.Exception, e.Description).Scan(&count)
 	if count > 0 {

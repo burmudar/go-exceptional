@@ -32,6 +32,7 @@ type StatEngine interface {
 	Init() error
 	Calc()
 	getStat(event *ErrorEvent) *StatItem
+	ListenOn(eventBus chan ErrorEvent, n Notifier)
 }
 
 type statEngine struct {
@@ -54,6 +55,7 @@ func (e *statEngine) Init() error {
 }
 
 func (e *statEngine) Calc() {
+	log.Printf("Crunching Day summaries to update Stat Items for all exceptions\n")
 	summaries := e.store.FetchDaySummaries()
 	statMap := createMapWithSummaries(summaries)
 	for k, v := range statMap {
@@ -65,42 +67,46 @@ func (e *statEngine) Calc() {
 		statItem := StatItem{k, avg, variance, stdDev, total, len(v), &now}
 		err := e.store.InsertOrUpdateStatItem(&statItem)
 		if err != nil {
-			log.Fatalf("Failed inserting Stat Item for: [%v] : %v\n", k, err)
+			log.Printf("Failed inserting Stat Item for: [%v] : %v\n", k, err)
 		} else {
 			log.Printf("Inserted StatItem for -> %v\n", k)
 		}
 	}
+	log.Printf("Crunching COMPLETE!")
 }
 
 func (e *statEngine) getStat(event *ErrorEvent) *StatItem {
 	return e.store.GetStatItem(event.Exception)
 }
 
-func (e *statEngine) ListenOn(eventChan chan ErrorEvent, n Notifier) {
+func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
 	cache := createStatCache(e)
-	for event := range eventChan {
+	for event := range eventBus {
 		if cache.shouldReset(&event) {
 			cache.reset()
 		}
 		log.Printf("Processing: %v\n", event)
 		var statItem *StatItem = cache.get(&event)
 		if statItem == nil {
-			n.Fire(nil) //notify(&event, nil, nil)
+			log.Printf("No Stat Item. Exception is propbably new. Notifying of: %v\n", event.Exception)
+			notification := &ErrorNotification{}
+			notification.ErrorEvent = &event
+			n.Fire(notification)
 		} else {
-			if e.dayTotalExceedsStatLimit(&event, statItem) {
-				n.Fire(nil) //(&event, statItem, s)
+			var sum *Summary = e.store.GetDaySummary(&event)
+			if e.dayTotalExceedsStatLimit(&event, statItem, sum) {
+				n.Fire(&ErrorNotification{&event, sum, statItem})
 			}
 		}
 
 	}
 }
 
-func (e *statEngine) dayTotalExceedsStatLimit(event *ErrorEvent, stat *StatItem) bool {
-	var s *Summary = e.store.GetDaySummary(event)
-	if s == nil {
+func (e *statEngine) dayTotalExceedsStatLimit(event *ErrorEvent, stat *StatItem, sum *Summary) bool {
+	if sum == nil {
 		return false
 	} else {
-		return s.Total >= stat.StdDevMax()
+		return sum.Total >= stat.StdDevMax()
 	}
 }
 

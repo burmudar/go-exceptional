@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+func TestParseLogLineWithEmptyLine(t *testing.T) {
+	_, err := ParseLogLine("")
+
+	if err == nil {
+		t.Errorf("When line is empty. Error should be returned")
+	}
+}
+
 func TestParseLogLineOfINFOLine(t *testing.T) {
 	const INFO_LINE string = "[2016-03-23 15:41:48,564] INFO  worker.DealerBalanceUpdater:27 - Starting update of dealer balance"
 	logEvent, err := ParseLogLine(INFO_LINE)

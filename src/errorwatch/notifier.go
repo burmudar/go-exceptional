@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/smtp"
+	"time"
 )
 
 type Notifier interface {
@@ -23,17 +24,41 @@ type EmailNotifier struct {
 	store    NotifyStore
 }
 
-func NewEmailNotifier(from, pass, to string) Notifier {
+type ConsoleNotifier struct {
+	store NotifyStore
+}
+
+func NewEmailNotifier(from, pass, to string, store NotifyStore) Notifier {
 	n := new(EmailNotifier)
 	n.from = from
 	n.to = to
 	n.password = pass
+	n.store = store
 	return n
+}
+
+func NewConsoleNotifier(store NotifyStore) Notifier {
+	c := new(ConsoleNotifier)
+	c.store = store
+	return c
+}
+
+func (c *ConsoleNotifier) Fire(n *ErrorNotification) error {
+	if c.store.HasNotification(n.ErrorEvent) {
+		log.Printf("Notification already sent for %v\n", n.ErrorEvent)
+		return nil
+	}
+
+	subject, body := n.describe()
+	fmt.Printf("\n*** NOTIFICATION ***\nTime: %v\nSubject: %v\nBody: %v\n\n*** END OF NOTIFICATION ***\n", time.Now(), subject, body)
+	c.store.UpdateNotificationSent(n.ErrorEvent)
+	return nil
 }
 
 func (n *EmailNotifier) Fire(notification *ErrorNotification) error {
 	if n.store.HasNotification(notification.ErrorEvent) {
 		log.Printf("Notification already sent for %v\n", notification.ErrorEvent)
+		return nil
 	}
 
 	subject, body := notification.describe()
