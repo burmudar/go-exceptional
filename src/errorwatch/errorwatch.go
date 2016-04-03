@@ -104,8 +104,9 @@ func extractCausedBy(line string) (*causedBy, error) {
 		return nil, errors.New("Not enough parts after split to determine Exception from: " + line)
 	}
 	c.Exception = strings.Trim(parts[1], " ")
-	if len(parts) == 3 {
-		c.Detail = strings.Trim(parts[2], " ")
+	if len(parts) >= 3 {
+		//in case there were also ':' in the detail, we add it back and consider the rest of the line as the detail
+		c.Detail = strings.Trim(strings.Join(parts[2:], ":"), " ")
 	}
 	if c.isEmpty() {
 		return nil, errors.New("No exception nor detail extracted from: " + line)

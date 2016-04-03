@@ -267,9 +267,10 @@ func TestContainsCausedBy(t *testing.T) {
 }
 
 func TestExtractCausedBy(t *testing.T) {
-	var NORMAL_CAUSED_BY = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
-	var CAUSED_BY_WITHOUT_DETAIL = "Caused by: javax.xml.bind.UnmarshalException"
-	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL = "Caused by:"
+	var NORMAL_CAUSED_BY string = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
+	var CAUSED_BY_WITH_MULTIPLE_COLONS string = "Caused by: com.flickswitch.sc.provider.ProviderServiceException: com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
+	var CAUSED_BY_WITHOUT_DETAIL string = "Caused by: javax.xml.bind.UnmarshalException"
+	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL string = "Caused by:"
 
 	causedBy, err := extractCausedBy(NORMAL_CAUSED_BY)
 	if causedBy == nil {
@@ -316,6 +317,15 @@ func TestExtractCausedBy(t *testing.T) {
 	}
 	if err == nil {
 		t.Errorf("Empty caused by should return an error")
+	}
+
+	causedBy, err = extractCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS)
+	if causedBy.Exception != "com.flickswitch.sc.provider.ProviderServiceException" {
+		t.Errorf("Incorrect exception extracted from Caused by with multiple colons")
+	}
+	expectedDetail = "com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
+	if causedBy.Detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted from Caused by with multiple colons. [%v] != [%v]\n", expectedDetail, causedBy.Detail)
 	}
 }
 
