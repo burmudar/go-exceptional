@@ -22,8 +22,8 @@ var oldLogsPath = ""
 var tailPath = ""
 
 func init() {
-	flag.StringVar(&oldLogsPath, "oldLogs", "logs", "Directory where old .log files are stored and need to be parsed")
-	flag.StringVar(&tailPath, "tailFile", "test.log", "location of file to tail and watch")
+	flag.StringVar(&oldLogsPath, "oldLogs", "", "Directory where old .log files are stored and need to be parsed")
+	flag.StringVar(&tailPath, "tailFile", "", "location of file to tail and watch")
 }
 
 func main() {
@@ -97,15 +97,14 @@ func watchFile(path string, errorProcess chan errorwatch.ErrorEvent) {
 	log.Printf("Tailing file: %v\n", path)
 	for l := range t.Lines {
 		line := l.Text
-		log.Printf("Tail: %v\n", line)
 		e, err := errorwatch.ParseLogLine(line)
 		if err != nil {
-			log.Printf("Failed parsing: %v\n", err)
 		} else {
 			event = e
 		}
 		errorEvent, err := addEventIfIsCausedByLine(line, event)
 		if errorEvent != nil {
+			log.Printf("Error Event found in tailed file: %v\n", errorEvent)
 			errorProcess <- *errorEvent
 			event = nil
 		}

@@ -80,12 +80,12 @@ func (n *ErrorNotification) describe() (title string, description string) {
 	body := ""
 	if n.isNewError() {
 		err := n.ErrorEvent
-		subject = "Subject: " + fmt.Sprintf("New Error: %v", err.Exception)
+		subject = fmt.Sprintf("New Error: %v", err.Exception)
 		body = fmt.Sprintf("New Error Event: [%v] - [%v] : [%v]\nCaused by: [%v] - [%v]\n", err.Timestamp, err.Source, err.Description, err.Exception, err.Detail)
 	} else {
 		err := n.ErrorEvent
-		subject = "Subject: " + fmt.Sprintf("[%v] exceeds Statistical Limit: %v", err.Exception, n.Stats.StdDevMax())
-		body = fmt.Sprintf("Error Event: [%v] - [%v] : [%v]\nCaused by: [%v] - [%v]\n Seen today = %v\n Max = %v", err.Timestamp, err.Source, err.Description, err.Exception, err.Detail, n.Summary.Total, n.Stats.StdDevMax())
+		subject = fmt.Sprintf("[%v] exceeds Statistical Limit: %v", err.Exception, n.Stats.StdDevMax())
+		body = fmt.Sprintf("Error Event: [%v] - [%v] : [%v]\nCaused by: [%v] - [%v]\nSeen today = %v\nMax = %v", err.Timestamp, err.Source, err.Description, err.Exception, err.Detail, n.Summary.Total, n.Stats.StdDevMax())
 	}
 	return subject, body
 }
