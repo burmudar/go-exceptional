@@ -3,6 +3,7 @@ package errorwatch
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -17,6 +18,10 @@ const EMPTY_LOG_LEVEL Level = ""
 const DATE_FORMAT string = "2006-01-02 15:04:05.000"
 
 const CAUSED_BY string = "Caused by:"
+
+var ErrNotLogLine error = errors.New("Line does not match Log Line format")
+
+var LOG_LINE_REGEX = regexp.MustCompile(`^\[([\w\d\s-:,]+)\]\s(INFO|ERROR|TRACE|DEBUG)\s+([\w\d.:]+)\s-\s(.*)`)
 
 type Event struct {
 	Timestamp   *time.Time
@@ -40,26 +45,30 @@ func (e *Event) string() string {
 }
 
 func ParseLogLine(line string) (*Event, error) {
+	if !LOG_LINE_REGEX.MatchString(line) {
+		return nil, ErrNotLogLine
+	}
 	event := new(Event)
-	line, date := removeFirstBetweenBrackets(line)
 
-	timestamp, err := toTimestamp(date)
+	matches := LOG_LINE_REGEX.FindStringSubmatch(line)
+
+	timestamp, err := toTimestamp(matches[1])
 	if err != nil {
 		return nil, err
 	}
 	event.Timestamp = timestamp
-	line, level := removeLevel(line)
+	level := Level(matches[2])
 	if level == EMPTY_LOG_LEVEL {
 		return nil, errors.New("No Log Level found. Log Level cannto be empty")
 	}
 	event.Level = level
 
-	line, source := removeSource(line)
+	source := matches[3]
 	if source == "" {
 		return nil, errors.New("No Source found. Source cannot be empty")
 	}
 	event.Source = source
-	event.Description = line
+	event.Description = matches[4]
 	return event, nil
 }
 
