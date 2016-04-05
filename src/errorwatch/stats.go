@@ -72,17 +72,27 @@ func (e *statEngine) calcStats(summaries []Summary) []*StatItem {
 	log.Printf("Crunching Day summaries to update Stat Items for all exceptions\n")
 	statMap := createMapWithSummaries(summaries)
 	stats := make([]*StatItem, 0)
-	for k, v := range statMap {
-		total := calcTotal(v)
-		avg := float64(total / len(v))
-		variance := calcVariance(v, avg)
-		stdDev := math.Sqrt(float64(variance))
-		now := time.Now()
-		statItem := StatItem{k, avg, variance, stdDev, total, len(v), &now}
-		stats = append(stats, &statItem)
+	for excp, summaries := range statMap {
+		log.Printf("Calculating stats for [%v]\n", excp)
+		statItem := createStatItem(summaries)
+		stats = append(stats, statItem)
 	}
 	log.Printf("Crunching COMPLETE!")
 	return stats
+}
+
+func createStatItem(summaries []Summary) *StatItem {
+	total := calcTotal(summaries)
+	avg := calcAvg(total, len(summaries))
+	variance := calcVariance(summaries, avg)
+	stdDev := calcStdDev(variance)
+	now := time.Now()
+	exception := ""
+	if len(summaries) > 0 {
+		exception = summaries[0].Exception
+	}
+	statItem := StatItem{exception, avg, variance, stdDev, total, len(summaries), &now}
+	return &statItem
 }
 
 func (e *statEngine) getStat(event *ErrorEvent) *StatItem {
@@ -105,7 +115,7 @@ func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
 			n.Fire(notification)
 		} else {
 			var sum *Summary = e.store.GetDaySummary(&event)
-			if e.dayTotalExceedsStatLimit(&event, statItem, sum) {
+			if e.dayTotalExceedsStatLimit(statItem, sum) {
 				n.Fire(&ErrorNotification{&event, sum, statItem})
 			}
 		}
@@ -113,7 +123,7 @@ func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
 	}
 }
 
-func (e *statEngine) dayTotalExceedsStatLimit(event *ErrorEvent, stat *StatItem, sum *Summary) bool {
+func (e *statEngine) dayTotalExceedsStatLimit(stat *StatItem, sum *Summary) bool {
 	if sum == nil {
 		return false
 	} else {
@@ -182,6 +192,17 @@ func calcTotal(summaries []Summary) int {
 		total += s.Total
 	}
 	return total
+}
+
+func calcStdDev(variance int) float64 {
+	return math.Sqrt(float64(variance))
+}
+
+func calcAvg(total, count int) float64 {
+	if count == 0 {
+		return 0
+	}
+	return float64(total / count)
 }
 
 func calcVariance(summaries []Summary, avg float64) int {
