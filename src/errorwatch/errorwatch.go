@@ -20,8 +20,10 @@ const DATE_FORMAT string = "2006-01-02 15:04:05.000"
 const CAUSED_BY string = "Caused by:"
 
 var ErrNotLogLine error = errors.New("Line does not match Log Line format")
+var ErrNotCausedByLine error = errors.New("Line does not match Caused by format or does not contain 'Caused by'")
 
 var LOG_LINE_REGEX = regexp.MustCompile(`^\[([\w\d\s-:,]+)\]\s(INFO|ERROR|TRACE|DEBUG)\s+([\w\d.:]+)\s-\s(.*)`)
+var CAUSED_BY_REGEX = regexp.MustCompile(`Caused by:\s([\w\d\.]+):?\s?(.*)`)
 
 type Event struct {
 	Timestamp   *time.Time
@@ -101,21 +103,15 @@ func (c *causedBy) isEmpty() bool {
 }
 
 func extractCausedBy(line string) (*causedBy, error) {
-	parts := strings.Split(line, ":")
-	/*
-	 Parts should ideally contain the following at each index:
-	 0 -> Caused by:
-	 1 -> Exception
-	 2 -> Detail about exception
-	*/
-	c := new(causedBy)
-	if len(parts) <= 1 {
-		return nil, errors.New("Not enough parts after split to determine Exception from: " + line)
+	if !CAUSED_BY_REGEX.MatchString(line) {
+		return nil, ErrNotCausedByLine
 	}
-	c.Exception = strings.Trim(parts[1], " ")
-	if len(parts) >= 3 {
-		//in case there were also ':' in the detail, we add it back and consider the rest of the line as the detail
-		c.Detail = strings.Trim(strings.Join(parts[2:], ":"), " ")
+	c := new(causedBy)
+	matches := CAUSED_BY_REGEX.FindStringSubmatch(line)
+	fmt.Printf("%v\n", matches)
+	c.Exception = matches[1]
+	if len(matches) > 2 {
+		c.Detail = matches[2]
 	}
 	if c.isEmpty() {
 		return nil, errors.New("No exception nor detail extracted from: " + line)
