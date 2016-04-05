@@ -30,7 +30,8 @@ func (s *StatItem) StdDevMax() int {
 
 type StatEngine interface {
 	Init() error
-	Calc()
+	calcStats(sumamries []Summary) []*StatItem
+	UpdateStats()
 	getStat(event *ErrorEvent) *StatItem
 	ListenOn(eventBus chan ErrorEvent, n Notifier)
 }
@@ -50,14 +51,27 @@ func (e *statEngine) Init() error {
 	if err == nil {
 		log.Println("Day summaries for errors initialized")
 	}
-	e.Calc()
+	e.UpdateStats()
 	return err
 }
 
-func (e *statEngine) Calc() {
-	log.Printf("Crunching Day summaries to update Stat Items for all exceptions\n")
+func (e *statEngine) UpdateStats() {
 	summaries := e.store.FetchDaySummaries()
+	stats := e.calcStats(summaries)
+	for _, stat := range stats {
+		err := e.store.InsertOrUpdateStatItem(stat)
+		if err != nil {
+			log.Printf("Failed inserting Stat: [%v] : %v\n", stat, err)
+		} else {
+			log.Printf("Inserted StatItem -> %v\n", stat)
+		}
+	}
+}
+
+func (e *statEngine) calcStats(summaries []Summary) []*StatItem {
+	log.Printf("Crunching Day summaries to update Stat Items for all exceptions\n")
 	statMap := createMapWithSummaries(summaries)
+	stats := make([]*StatItem, 0)
 	for k, v := range statMap {
 		total := calcTotal(v)
 		avg := float64(total / len(v))
@@ -65,14 +79,10 @@ func (e *statEngine) Calc() {
 		stdDev := math.Sqrt(float64(variance))
 		now := time.Now()
 		statItem := StatItem{k, avg, variance, stdDev, total, len(v), &now}
-		err := e.store.InsertOrUpdateStatItem(&statItem)
-		if err != nil {
-			log.Printf("Failed inserting Stat Item for: [%v] : %v\n", k, err)
-		} else {
-			log.Printf("Inserted StatItem for -> %v\n", k)
-		}
+		stats = append(stats, &statItem)
 	}
 	log.Printf("Crunching COMPLETE!")
+	return stats
 }
 
 func (e *statEngine) getStat(event *ErrorEvent) *StatItem {
@@ -82,7 +92,8 @@ func (e *statEngine) getStat(event *ErrorEvent) *StatItem {
 func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
 	cache := createStatCache(e)
 	for event := range eventBus {
-		if cache.shouldReset(&event) {
+		now := time.Now()
+		if cache.shouldReset(&now) {
 			cache.reset()
 		}
 		log.Printf("Processing: %v\n", event)
@@ -123,13 +134,13 @@ func createStatCache(engine StatEngine) *statCache {
 	return c
 }
 
-func (c *statCache) shouldReset(event *ErrorEvent) bool {
-	return event.Timestamp.Sub(*c.start).Hours() >= 24
+func (c *statCache) shouldReset(t *time.Time) bool {
+	return t.Sub(*c.start).Hours() >= 24
 }
 
 func (c *statCache) reset() {
 	c.start, c.cache = initStartAndMap()
-	c.engine.Calc()
+	c.engine.UpdateStats()
 }
 
 func initStartAndMap() (*time.Time, map[string]*StatItem) {
