@@ -48,6 +48,8 @@ const SQL_TABLE_ERROR_DAY_SUMMARY string = `
 		unique(error_date, exception)
 	)
 	`
+const SQL_VIEW_EXCEPTIONS_PER_DAY string = `CREATE VIEW exceptions_per_day AS select DATE(event_datetime), exception, count(exception) as excp_count from error_events group by DATE(event_datetime),exception order by event_datetime`
+const SQL_VIEW_UNIQUE_EXCEPTIONS string = `CREATE VIEW unique_exception AS select min(date(event_datetime)), exception, count(exception) as excp_count, cast((julianday('now') - julianday(event_datetime)) as int) as total from error_events group by exception order by event_datetime`
 
 var ErrTableExists error = errors.New("Not creating Table. Table already exists")
 
@@ -227,6 +229,9 @@ func initDB() (*sql.DB, []error) {
 	tables["error_stats"] = SQL_ERROR_STATS
 	tables["error_day_summary"] = SQL_TABLE_ERROR_DAY_SUMMARY
 	tables["notifications"] = SQL_TABLE_NOTIFICATIONS
+	//kind of like tables ... but really views
+	tables["exceptions_per_day"] = SQL_VIEW_EXCEPTIONS_PER_DAY
+	tables["unique_exceptions"] = SQL_VIEW_UNIQUE_EXCEPTIONS
 	for table, sql := range tables {
 		err := createTable(db, table, sql)
 		if err == ErrTableExists {
