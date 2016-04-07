@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type Summary struct {
+type DaySummary struct {
 	Id        int
 	Date      time.Time
 	Exception string
@@ -30,7 +30,7 @@ func (s *StatItem) StdDevMax() int {
 
 type StatEngine interface {
 	Init() error
-	calcStats(sumamries []Summary) []*StatItem
+	calcStats(sumamries []DaySummary) []*StatItem
 	UpdateStats()
 	getStat(event *ErrorEvent) *StatItem
 	ListenOn(eventBus chan ErrorEvent, n Notifier)
@@ -68,7 +68,7 @@ func (e *statEngine) UpdateStats() {
 	}
 }
 
-func (e *statEngine) calcStats(summaries []Summary) []*StatItem {
+func (e *statEngine) calcStats(summaries []DaySummary) []*StatItem {
 	log.Printf("Crunching Day summaries to update Stat Items for all exceptions\n")
 	statMap := createMapWithSummaries(summaries)
 	stats := make([]*StatItem, 0)
@@ -81,7 +81,7 @@ func (e *statEngine) calcStats(summaries []Summary) []*StatItem {
 	return stats
 }
 
-func createStatItem(summaries []Summary) *StatItem {
+func createStatItem(summaries []DaySummary) *StatItem {
 	total := calcTotal(summaries)
 	avg := calcAvg(total, len(summaries))
 	variance := calcVariance(summaries, avg)
@@ -114,7 +114,7 @@ func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
 			notification.ErrorEvent = &event
 			n.Fire(notification)
 		} else {
-			var sum *Summary = e.store.GetDaySummary(&event)
+			var sum *DaySummary = e.store.GetDayDaySummary(&event)
 			if e.dayTotalExceedsStatLimit(statItem, sum) {
 				n.Fire(&ErrorNotification{&event, sum, statItem})
 			}
@@ -123,7 +123,7 @@ func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
 	}
 }
 
-func (e *statEngine) dayTotalExceedsStatLimit(stat *StatItem, sum *Summary) bool {
+func (e *statEngine) dayTotalExceedsStatLimit(stat *StatItem, sum *DaySummary) bool {
 	if sum == nil {
 		return false
 	} else {
@@ -174,19 +174,19 @@ func (c *statCache) get(event *ErrorEvent) *StatItem {
 	return item
 }
 
-func createMapWithSummaries(summaries []Summary) map[string][]Summary {
-	var statMap map[string][]Summary = make(map[string][]Summary)
+func createMapWithSummaries(summaries []DaySummary) map[string][]DaySummary {
+	var statMap map[string][]DaySummary = make(map[string][]DaySummary)
 	for _, s := range summaries {
 		if item, ok := statMap[s.Exception]; ok {
 			statMap[s.Exception] = append(item, s)
 		} else {
-			statMap[s.Exception] = append([]Summary{}, s)
+			statMap[s.Exception] = append([]DaySummary{}, s)
 		}
 	}
 	return statMap
 }
 
-func calcTotal(summaries []Summary) int {
+func calcTotal(summaries []DaySummary) int {
 	var total int
 	for _, s := range summaries {
 		total += s.Total
@@ -205,7 +205,7 @@ func calcAvg(total, count int) float64 {
 	return float64(total / count)
 }
 
-func calcVariance(summaries []Summary, avg float64) int {
+func calcVariance(summaries []DaySummary, avg float64) int {
 	var variance int
 	for _, s := range summaries {
 		diff := float64(s.Total) - avg

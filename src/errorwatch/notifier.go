@@ -13,7 +13,7 @@ type Notifier interface {
 
 type ErrorNotification struct {
 	ErrorEvent *ErrorEvent
-	Summary    *Summary
+	DaySummary *DaySummary
 	Stats      *StatItem
 }
 
@@ -72,7 +72,7 @@ func (n *EmailNotifier) Fire(notification *ErrorNotification) error {
 }
 
 func (n *ErrorNotification) isNewError() bool {
-	return n.Summary == nil && n.Stats == nil
+	return n.DaySummary == nil && n.Stats == nil
 }
 
 func (n *ErrorNotification) describe() (title string, description string) {
@@ -85,7 +85,7 @@ func (n *ErrorNotification) describe() (title string, description string) {
 	} else {
 		err := n.ErrorEvent
 		subject = fmt.Sprintf("[%v] exceeds Statistical Limit: %v", err.Exception, n.Stats.StdDevMax())
-		body = fmt.Sprintf("Error Event: [%v] - [%v] : [%v]\nCaused by: [%v] - [%v]\nSeen today = %v\nMax = %v", err.Timestamp, err.Source, err.Description, err.Exception, err.Detail, n.Summary.Total, n.Stats.StdDevMax())
+		body = fmt.Sprintf("Error Event: [%v] - [%v] : [%v]\nCaused by: [%v] - [%v]\nSeen today = %v\nMax = %v", err.Timestamp, err.Source, err.Description, err.Exception, err.Detail, n.DaySummary.Total, n.Stats.StdDevMax())
 	}
 	return subject, body
 }

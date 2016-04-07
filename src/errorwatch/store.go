@@ -67,8 +67,8 @@ type ErrorWatchStore interface {
 type StatStore interface {
 	GetStatItem(excp string) *StatItem
 	InsertOrUpdateStatItem(s *StatItem) error
-	FetchDaySummaries() []Summary
-	GetDaySummary(e *ErrorEvent) *Summary
+	FetchDaySummaries() []DaySummary
+	GetDayDaySummary(e *ErrorEvent) *DaySummary
 	UpdateDaySummaries() error
 }
 
@@ -150,22 +150,22 @@ func (store *dbStore) InsertOrUpdateStatItem(s *StatItem) error {
 	return err
 }
 
-func (store *dbStore) FetchDaySummaries() []Summary {
-	var summaries []Summary
+func (store *dbStore) FetchDaySummaries() []DaySummary {
+	var summaries []DaySummary
 	rows, err := store.db.Query("select * from error_day_summary")
 	if err != nil {
 		return summaries
 	}
 	for rows.Next() {
-		var s Summary
+		var s DaySummary
 		rows.Scan(&s.Id, &s.Date, &s.Exception, &s.Total)
 		summaries = append(summaries, s)
 	}
 	return summaries
 }
 
-func (store *dbStore) GetDaySummary(event *ErrorEvent) *Summary {
-	s := new(Summary)
+func (store *dbStore) GetDayDaySummary(event *ErrorEvent) *DaySummary {
+	s := new(DaySummary)
 	var tempDate string
 	/*
 		Scan into tempDate string since Scan can't automatically figure out the Date format. So we scan to a string and parse the string with a known date layout
@@ -173,7 +173,7 @@ func (store *dbStore) GetDaySummary(event *ErrorEvent) *Summary {
 	err := store.db.QueryRow("select DATE(event_datetime) as error_date, exception, count(exception) as total from error_events where error_date = DATE(?) group by DATE(error_date), exception",
 		event.Timestamp).Scan(&tempDate, &s.Exception, &s.Total)
 	if err != nil {
-		log.Printf("Failed to map Day Summary for [%v] : %v\n", *event, err)
+		log.Printf("Failed to map DaySummary for [%v] : %v\n", *event, err)
 	}
 	date, err := toDate(tempDate)
 	if err != nil {
