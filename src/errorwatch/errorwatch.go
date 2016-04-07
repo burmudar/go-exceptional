@@ -108,7 +108,6 @@ func extractCausedBy(line string) (*causedBy, error) {
 	}
 	c := new(causedBy)
 	matches := CAUSED_BY_REGEX.FindStringSubmatch(line)
-	fmt.Printf("%v\n", matches)
 	c.Exception = matches[1]
 	if len(matches) > 2 {
 		c.Detail = matches[2]
@@ -127,47 +126,8 @@ func ContainsCausedBy(line string) bool {
 	return false
 }
 
-func removeSource(line string) (string, string) {
-	end := strings.Index(line, "-")
-	if end < 0 {
-		return line, ""
-	}
-	source := strings.Trim(line[0:end], " ")
-	newLine := line[end+1 : len(line)]
-	newLine = strings.TrimLeft(newLine, " ")
-	return newLine, source
-}
-
-func removeLevel(line string) (string, Level) {
-	line = strings.TrimLeft(line, " ")
-	end := strings.Index(line, " ")
-	var level Level = Level(line[0:end])
-	newLine := strings.TrimLeft(line[end:len(line)], " ")
-	switch level {
-	case INFO_LOG_LEVEL:
-		return newLine, INFO_LOG_LEVEL
-	case DEBUG_LOG_LEVEL:
-		return newLine, DEBUG_LOG_LEVEL
-	case TRACE_LOG_LEVEL:
-		return newLine, TRACE_LOG_LEVEL
-	case ERROR_LOG_LEVEL:
-		return newLine, ERROR_LOG_LEVEL
-	default:
-		return line, EMPTY_LOG_LEVEL
-	}
-}
-
 func toTimestamp(date string) (*time.Time, error) {
 	date = strings.Replace(date, ",", ".", 1)
 	timestamp, err := time.Parse(DATE_FORMAT, date)
 	return &timestamp, err
-}
-
-func removeFirstBetweenBrackets(line string) (string, string) {
-	start := strings.Index(line, "[")
-	end := strings.Index(line, "]")
-	if start == end || start > end {
-		return line, ""
-	}
-	return line[end+1 : len(line)], line[start+1 : end]
 }

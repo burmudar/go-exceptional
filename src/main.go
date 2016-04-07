@@ -44,13 +44,9 @@ func main() {
 	}
 	loadAll(findAllFilesToParse(oldLogsPath))
 	statEngine := errorwatch.NewStatEngine(store)
-	err := statEngine.Init()
-	if err != nil {
-		log.Printf("Stat Engine failed to initialize: %v\n", err)
-		return
-	} else {
-		log.Printf("Stat Engine initialized")
-	}
+	statEngine.Init()
+	statEngine.UpdateStats()
+	log.Printf("Stat Engine initialized")
 	notifier := errorwatch.NewConsoleNotifier(store.Notifications())
 	var eventProcess chan errorwatch.ErrorEvent = make(chan errorwatch.ErrorEvent)
 	go statEngine.ListenOn(eventProcess, notifier)

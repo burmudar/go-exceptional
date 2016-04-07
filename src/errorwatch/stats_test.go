@@ -1,6 +1,7 @@
 package errorwatch
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -131,30 +132,58 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 }
 
 func TestCalcAvg(t *testing.T) {
-	t.Skip()
 	day1 := newTime(2016, 03, 31, 12, 00, 00)
-	day2 := newTime(2016, 04, 01, 12, 00, 00)
+	var day2 = time.Now()
 	summaries := []*DaySummary{
 		&DaySummary{1, *day1, "excp1", 5},
-		&DaySummary{2, *day2, "excp1", 5},
+		&DaySummary{2, day2, "excp1", 5},
 	}
 	summary := Summary{}
 	summary.Exception = "excp1"
 	summary.FirstSeen = *day1
 	summary.Total = 10
 	summary.DaySummaries = summaries
-	knownAvg := float64(summary.Total / summary.DaysFromFirstSeen(*day2))
+	knownAvg := float64(summary.Total / summary.DaysFromFirstSeen(day2))
 
-	avg := calcAvg(summary)
+	avg := summary.calcAvg()
 	if avg != knownAvg {
 		t.Errorf("Incorrect Avg calculated for summaries")
 	}
 
-	avg = calcAvg(summary)
+	summary = Summary{}
+	avg = summary.calcAvg()
 	if avg != 0 {
 		t.Errorf("Avg should be 0 for empty summaries")
 	}
 }
+
+func TestCalcVariance(t *testing.T) {
+	day1 := newTime(2016, 03, 31, 12, 00, 00)
+	var day2 = time.Now()
+	summaries := []*DaySummary{
+		&DaySummary{1, *day1, "excp1", 5},
+		&DaySummary{2, day2, "excp1", 5},
+	}
+	summary := Summary{}
+	summary.Exception = "excp1"
+	summary.FirstSeen = *day1
+	summary.Total = 10
+	summary.DaySummaries = summaries
+	knownAvg := float64(summary.Total / summary.DaysFromFirstSeen(day2))
+	knownVariance := (math.Pow(float64(summary.DaySummaries[0].Total)-knownAvg, 2) + math.Pow(float64(summary.DaySummaries[0].Total)-knownAvg, 2)) / float64(summary.DaysFromFirstSeen(day2))
+
+	variance := summary.calcVariance(knownAvg)
+	if variance != knownVariance {
+		t.Errorf("Incorrect Variance calculated for summaries")
+	}
+
+	summary = Summary{}
+	variance = summary.calcVariance(knownAvg)
+	if variance != 0 {
+		t.Errorf("Variance should be 0 for empty summaries")
+	}
+}
+
 func newTime(y, m, d, h, mm, s int) *time.Time {
 	temp := time.Date(y, time.Month(m), d, h, mm, s, 0, time.Local)
 	return &temp

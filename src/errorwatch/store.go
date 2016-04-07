@@ -162,6 +162,7 @@ func (store *dbStore) FetchSummaries() []Summary {
 		var s Summary
 		rows.Scan(&s.FirstSeen, &s.Exception, &s.Total)
 		s.DaySummaries = store.FetchDaySummariesByException(s.Exception)
+		summaries = append(summaries, s)
 	}
 	return summaries
 }
@@ -222,7 +223,7 @@ func (store *dbStore) UpdateDaySummaries() error {
 
 func (store *dbStore) AddErrorEvent(e *ErrorEvent) error {
 	var count int
-	log.Printf("Inserting: %v\n", *e)
+	log.Printf("Inserting -> %v : %v\n", *e.Timestamp, e.Exception)
 	store.db.QueryRow(`select count(id) from error_events where event_datetime=? AND source=? AND description=? AND exception=? AND excp_description=?`,
 		e.Timestamp, e.Source, e.Description, e.Exception, e.Description).Scan(&count)
 	if count > 0 {

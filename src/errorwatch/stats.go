@@ -15,14 +15,9 @@ type Summary struct {
 }
 
 func (s Summary) DaysFromFirstSeen(date time.Time) int {
-	log.Printf("%v", s.FirstSeen)
 	start := s.FirstSeen.Round(24 * time.Hour)
-	log.Printf("%v", start)
-	log.Printf("%v", date)
 	date = date.Round(24 * time.Hour)
-	log.Printf("%v", date)
 	hours := date.Sub(start).Hours()
-
 	return int(math.Ceil(hours / 24))
 }
 
@@ -36,7 +31,7 @@ type DaySummary struct {
 type StatItem struct {
 	Exception   string
 	Mean        float64
-	Variance    int
+	Variance    float64
 	StdDev      float64
 	TotalErrors int
 	DayCount    int
@@ -73,8 +68,11 @@ func (e *statEngine) UpdateStats() {
 	err := e.store.UpdateDaySummaries()
 	if err == nil {
 		log.Println("Day summaries for errors updated")
+	} else {
+		log.Printf("Failed updating day summaires: %v\n", err)
 	}
 	summaries := e.store.FetchSummaries()
+	log.Printf("Got %v Summaires. Calculating status on them\n", len(summaries))
 	stats := e.calcStats(summaries)
 	for _, stat := range stats {
 		err := e.store.InsertOrUpdateStatItem(stat)
@@ -100,11 +98,11 @@ func (e *statEngine) calcStats(summaries []Summary) []*StatItem {
 }
 
 func createStatItem(s Summary) *StatItem {
-	avg := calcAvg(s)
-	variance := calcVariance(s, avg)
-	stdDev := calcStdDev(variance)
+	avg := s.calcAvg()
+	variance := s.calcVariance(avg)
+	stdDev := s.calcStdDev(variance)
 	now := time.Now()
-	statItem := StatItem{s.Exception, avg, variance, stdDev, s.Total, len(s.DaySummaries), &now}
+	statItem := StatItem{s.Exception, avg, variance, stdDev, s.Total, s.DaysFromFirstSeen(now), &now}
 	return &statItem
 }
 
@@ -197,11 +195,11 @@ func createMapWithSummaries(summaries []Summary) map[string]Summary {
 	return statMap
 }
 
-func calcStdDev(variance int) float64 {
+func (s Summary) calcStdDev(variance float64) float64 {
 	return math.Sqrt(float64(variance))
 }
 
-func calcAvg(s Summary) float64 {
+func (s Summary) calcAvg() float64 {
 	now := time.Now()
 	count := s.DaysFromFirstSeen(now)
 	if count == 0 {
@@ -210,11 +208,15 @@ func calcAvg(s Summary) float64 {
 	return float64(s.Total / count)
 }
 
-func calcVariance(s Summary, avg float64) int {
+func (s Summary) calcVariance(avg float64) float64 {
 	var variance int
+	days := s.DaysFromFirstSeen(time.Now())
+	if days == 0 {
+		return 0
+	}
 	for _, day := range s.DaySummaries {
 		diff := float64(day.Total) - avg
 		variance += int(math.Pow(diff, 2))
 	}
-	return variance / len(s.DaySummaries)
+	return float64(variance / days)
 }
