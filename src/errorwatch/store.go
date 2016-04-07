@@ -67,8 +67,9 @@ type ErrorWatchStore interface {
 type StatStore interface {
 	GetStatItem(excp string) *StatItem
 	InsertOrUpdateStatItem(s *StatItem) error
+	FetchSummaries() []Summary
 	FetchDaySummaries() []DaySummary
-	GetDayDaySummary(e *ErrorEvent) *DaySummary
+	GetDaySummary(e *ErrorEvent) *DaySummary
 	UpdateDaySummaries() error
 }
 
@@ -150,6 +151,35 @@ func (store *dbStore) InsertOrUpdateStatItem(s *StatItem) error {
 	return err
 }
 
+func (store *dbStore) FetchSummaries() []Summary {
+	var summaries []Summary
+	rows, err := store.db.Query("select min(error_date) as first_seen, exception, sum(total) as total from error_day_summary group by exception order by error_date")
+	if err != nil {
+		log.Printf("Failed to retrieve all Summaries: %v\n", err)
+		return summaries
+	}
+	for rows.Next() {
+		var s Summary
+		rows.Scan(&s.FirstSeen, &s.Exception, &s.Total)
+		s.DaySummaries = store.FetchDaySummariesByException(s.Exception)
+	}
+	return summaries
+}
+
+func (store *dbStore) FetchDaySummariesByException(excp string) []*DaySummary {
+	var summaries []*DaySummary
+	rows, err := store.db.Query("select * from error_day_summary where exception = ?", excp)
+	if err != nil {
+		return summaries
+	}
+	for rows.Next() {
+		var s DaySummary
+		rows.Scan(&s.Id, &s.Date, &s.Exception, &s.Total)
+		summaries = append(summaries, &s)
+	}
+	return summaries
+}
+
 func (store *dbStore) FetchDaySummaries() []DaySummary {
 	var summaries []DaySummary
 	rows, err := store.db.Query("select * from error_day_summary")
@@ -164,7 +194,7 @@ func (store *dbStore) FetchDaySummaries() []DaySummary {
 	return summaries
 }
 
-func (store *dbStore) GetDayDaySummary(event *ErrorEvent) *DaySummary {
+func (store *dbStore) GetDaySummary(event *ErrorEvent) *DaySummary {
 	s := new(DaySummary)
 	var tempDate string
 	/*
