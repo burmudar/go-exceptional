@@ -5,7 +5,6 @@ import (
 	"errors"
 	"errorwatch"
 	"flag"
-	"fmt"
 	"github.com/hpcloud/tail"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
@@ -28,8 +27,8 @@ func init() {
 
 func main() {
 	flag.Parse()
-	fmt.Println("Starting Error Watcher")
-	defer fmt.Println("Error Watcher exiting")
+	log.Println("Starting Error Watcher")
+	defer log.Println("Error Watcher exiting")
 
 	if tailPath == "" {
 		log.Fatalf("No File given to Tail and watch")

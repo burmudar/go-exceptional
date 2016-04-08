@@ -137,79 +137,6 @@ func TestParseLogLineOfERRORLine(t *testing.T) {
 	}
 }
 
-func TestRemoveSource(t *testing.T) {
-	var expectedSource string = "worker.DealerBalanceUpdater:27"
-	var tail string = "Starting update of dealer balance"
-	var line string = expectedSource + " - " + tail
-
-	leftOver, src := removeSource(line)
-	if src != expectedSource {
-		t.Errorf("Expected source to be extracted as [%v] but got [%v]", expectedSource, src)
-	}
-	if leftOver != tail {
-		t.Errorf("Expected after successful source removal that line be [%v] instead got [%v]", tail, leftOver)
-	}
-
-	line = "String with no dash"
-	leftOver, src = removeSource(line)
-	if src != "" {
-		t.Errorf("When line contains no dash and therefore there is no source, source should be empty. Got [%v]", src)
-	}
-	if leftOver != line {
-		t.Errorf("When no source is in given line, orignal line should be returned. Got [%v]", leftOver)
-	}
-}
-
-func TestExtractLevel(t *testing.T) {
-	var infoLine string = "  INFO someother stuff here"
-	var debugLine string = " DEBUG someother stuff here"
-	var traceLine string = " TRACE someother stuff here"
-	var errorLine string = "ERROR someother stuff here"
-	var leftOver = "someother stuff here"
-
-	line, level := removeLevel(infoLine)
-	if line != leftOver {
-		t.Errorf("Expected line with INFO removed to be returned got [%v]", line)
-	}
-	if level != INFO_LOG_LEVEL {
-		t.Errorf("Expected INFO Level to be removeed got [%v]", level)
-	}
-
-	line, level = removeLevel(debugLine)
-	if line != leftOver {
-		t.Errorf("Expected line with DEBUG removed to be returned got [%v]", line)
-	}
-	if level != DEBUG_LOG_LEVEL {
-		t.Errorf("Expected DEBUG Level to be removeed got [%v]", level)
-	}
-
-	line, level = removeLevel(traceLine)
-	if line != leftOver {
-		t.Errorf("Expected line with TRACE removed to be returned got [%v]", line)
-	}
-	if level != TRACE_LOG_LEVEL {
-		t.Errorf("Expected TRACE Level to be removeed got [%v]", level)
-	}
-
-	line, level = removeLevel(errorLine)
-	if line != leftOver {
-		t.Errorf("Expected line with ERROR removed to be returned got [%v]", line)
-	}
-	if level != ERROR_LOG_LEVEL {
-		t.Errorf("Expected ERROR Level to be removeed got [%v]", level)
-	}
-
-	var unkownLine = "UNKOWN something"
-	line, level = removeLevel(unkownLine)
-	if level != EMPTY_LOG_LEVEL {
-		t.Errorf("When Log Level is not known in string or not found, EMPTY_LOG_LEVEL should be returned. Got [%v]", level)
-	}
-	if line != unkownLine {
-		t.Errorf("When Log Level is unknown, original line should be returned got [%v]", line)
-	}
-
-}
-
 func TestToTimestamp(t *testing.T) {
 	var date string = "2016-03-23 15:15:15,155"
 	var expectedTime time.Time = time.Date(2016, 03, 23, 15, 15, 15, 155*1000000, time.UTC)
@@ -225,28 +152,6 @@ func TestToTimestamp(t *testing.T) {
 	timestamp, err = toTimestamp("invalid date")
 	if err == nil {
 		t.Errorf("Expected Error to not be nil when invalid date is given to be converted")
-	}
-}
-
-func TestRemoveDatePortion(t *testing.T) {
-	var partBetweenBrackets string = "2016-01-01 15:15:15,155"
-	var part = "[" + partBetweenBrackets + "]"
-
-	newPart, removedPart := removeFirstBetweenBrackets(part)
-	if removedPart != partBetweenBrackets {
-		t.Errorf("Expected [%v] to be returned as the part between brackets but got [%v]", partBetweenBrackets, removedPart)
-	}
-	if newPart != "" {
-		t.Errorf("Expected returned string to not contain the removed part anymore, but got [%v]", newPart)
-	}
-
-	part = "No brakcets"
-	newPart, removedPart = removeFirstBetweenBrackets(part)
-	if newPart != part {
-		t.Errorf("Expected original string to be returned when given string does not contain brackets, got [%v]", newPart)
-	}
-	if removedPart != "" {
-		t.Error("When given string contains no brackets, removed Part should be empty. Got [%v]", removedPart)
 	}
 }
 

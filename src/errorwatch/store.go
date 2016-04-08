@@ -160,7 +160,8 @@ func (store *dbStore) FetchSummaries() []Summary {
 	}
 	for rows.Next() {
 		var s Summary
-		rows.Scan(&s.FirstSeen, &s.Exception, &s.Total)
+		rows.Scan(&s.StartDate, &s.Exception, &s.Total)
+		s.EndDate = time.Now()
 		s.DaySummaries = store.FetchDaySummariesByException(s.Exception)
 		summaries = append(summaries, s)
 	}

@@ -10,7 +10,7 @@ func TestStatCacheShouldResetIsTrueWhenEventIsPastStart(t *testing.T) {
 	cache := statCache{start: newTime(2016, 3, 31, 12, 0, 0)}
 	resetTime := newTime(2016, 4, 1, 12, 0, 0)
 	if cache.shouldReset(resetTime) == false {
-		t.Errorf("ShouldReset should be true when ErrorEvent is past Cache start date")
+		t.Errorf("ShouldReset should be true when ErrorEvent is past Cache start endDate")
 	}
 
 	resetTime = newTime(2017, 3, 31, 12, 0, 0)
@@ -34,31 +34,34 @@ func TestStatCacheShouldResetIsTrueWhenEventIsPastStart(t *testing.T) {
 	}
 }
 
-func TestCalcDaysFromFirstSeen(t *testing.T) {
-	firstSeen := newTime(2016, 03, 30, 12, 00, 00)
-	date := newTime(2016, 3, 31, 1, 0, 0)
+func TestCalcDaysInPeriod(t *testing.T) {
+	startDate := newTime(2016, 03, 30, 12, 00, 00)
+	endDate := newTime(2016, 3, 31, 1, 0, 0)
 	summary := Summary{
 		Exception:    "excp1",
-		FirstSeen:    *firstSeen,
+		StartDate:    *startDate,
+		EndDate:      *endDate,
 		Total:        10,
 		DaySummaries: []*DaySummary{},
 	}
-	days := summary.DaysFromFirstSeen(*date)
+	days := summary.DaysInPeriod()
 	expectedDays := 1
 	if expectedDays != days {
 		t.Errorf("Incorrect number of days returned. Regardless of time, if its the next day, days passed should be 1: Got %v Expected %v", days, expectedDays)
 	}
 
-	date = firstSeen
-	days = summary.DaysFromFirstSeen(*date)
+	endDate = startDate
+	summary.EndDate = *endDate
+	days = summary.DaysInPeriod()
 	expectedDays = 0
 	if expectedDays != days {
-		t.Errorf("Incorrect number of days returned. If date given is same as date first seen days should be 0: Got %v Expected %v", days, expectedDays)
+		t.Errorf("Incorrect number of days returned. If endDate given is same as endDate first seen days should be 0: Got %v Expected %v", days, expectedDays)
 	}
 
-	date = newTime(2016, 4, 30, 12, 12, 12)
+	endDate = newTime(2016, 4, 30, 12, 12, 12)
+	summary.EndDate = *endDate
 	expectedDays = 31
-	days = summary.DaysFromFirstSeen(*date)
+	days = summary.DaysInPeriod()
 	if expectedDays != days {
 		t.Errorf("Incorrect number of days returned. Got %v Expected %v", days, expectedDays)
 	}
@@ -90,7 +93,8 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 	day2 := newTime(2016, 04, 01, 12, 00, 00)
 	summary1 := Summary{
 		Exception: "excp1",
-		FirstSeen: *day1,
+		StartDate: *day1,
+		EndDate:   *day2,
 		Total:     10,
 		DaySummaries: []*DaySummary{
 			&DaySummary{1, *day1, "excp1", 5},
@@ -100,7 +104,8 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 	summary2 :=
 		Summary{
 			Exception: "excp2",
-			FirstSeen: *day1,
+			StartDate: *day1,
+			EndDate:   *day2,
 			Total:     12,
 			DaySummaries: []*DaySummary{
 				&DaySummary{3, *day1, "excp2", 6},
@@ -124,8 +129,8 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 		if stats[i].Exception == "excp2" && stats[i].TotalErrors != 12 {
 			t.Errorf("Excp2 has 6 errors for day 1 and 6 for day 2, therefore Total Errors should be 12")
 		}
-		if stat.DayCount != 2 {
-			t.Errorf("Each excp happens on two separate days, therefore DayCount of statItem should be 2")
+		if stat.DayCount != 1 {
+			t.Errorf("Each excp happens on two separate days, therefore DayCount of statItem should be 2. Got %v", stat.DayCount)
 		}
 	}
 
@@ -140,10 +145,11 @@ func TestCalcAvg(t *testing.T) {
 	}
 	summary := Summary{}
 	summary.Exception = "excp1"
-	summary.FirstSeen = *day1
+	summary.StartDate = *day1
+	summary.EndDate = day2
 	summary.Total = 10
 	summary.DaySummaries = summaries
-	knownAvg := float64(summary.Total / summary.DaysFromFirstSeen(day2))
+	knownAvg := float64(summary.Total / summary.DaysInPeriod())
 
 	avg := summary.calcAvg()
 	if avg != knownAvg {
@@ -166,15 +172,16 @@ func TestCalcVariance(t *testing.T) {
 	}
 	summary := Summary{}
 	summary.Exception = "excp1"
-	summary.FirstSeen = *day1
+	summary.StartDate = *day1
+	summary.EndDate = day2
 	summary.Total = 10
 	summary.DaySummaries = summaries
-	knownAvg := float64(summary.Total / summary.DaysFromFirstSeen(day2))
-	knownVariance := (math.Pow(float64(summary.DaySummaries[0].Total)-knownAvg, 2) + math.Pow(float64(summary.DaySummaries[0].Total)-knownAvg, 2)) / float64(summary.DaysFromFirstSeen(day2))
+	knownAvg := float64(summary.Total / summary.DaysInPeriod())
+	knownVariance := (math.Pow(float64(summary.DaySummaries[0].Total)-knownAvg, 2) + math.Pow(float64(summary.DaySummaries[0].Total)-knownAvg, 2)) / float64(summary.DaysInPeriod())
 
 	variance := summary.calcVariance(knownAvg)
 	if variance != knownVariance {
-		t.Errorf("Incorrect Variance calculated for summaries")
+		t.Errorf("Incorrect Variance calculated for summaries. Got %v Expected %v", variance, knownVariance)
 	}
 
 	summary = Summary{}

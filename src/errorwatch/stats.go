@@ -9,15 +9,16 @@ import (
 
 type Summary struct {
 	Exception    string
-	FirstSeen    time.Time
+	StartDate    time.Time
+	EndDate      time.Time
 	DaySummaries []*DaySummary
 	Total        int
 }
 
-func (s Summary) DaysFromFirstSeen(date time.Time) int {
-	start := s.FirstSeen.Round(24 * time.Hour)
-	date = date.Round(24 * time.Hour)
-	hours := date.Sub(start).Hours()
+func (s Summary) DaysInPeriod() int {
+	start := s.StartDate.Round(24 * time.Hour)
+	end := s.EndDate.Round(24 * time.Hour)
+	hours := end.Sub(start).Hours()
 	return int(math.Ceil(hours / 24))
 }
 
@@ -102,7 +103,7 @@ func createStatItem(s Summary) *StatItem {
 	variance := s.calcVariance(avg)
 	stdDev := s.calcStdDev(variance)
 	now := time.Now()
-	statItem := StatItem{s.Exception, avg, variance, stdDev, s.Total, s.DaysFromFirstSeen(now), &now}
+	statItem := StatItem{s.Exception, avg, variance, stdDev, s.Total, s.DaysInPeriod(), &now}
 	return &statItem
 }
 
@@ -200,8 +201,7 @@ func (s Summary) calcStdDev(variance float64) float64 {
 }
 
 func (s Summary) calcAvg() float64 {
-	now := time.Now()
-	count := s.DaysFromFirstSeen(now)
+	count := s.DaysInPeriod()
 	if count == 0 {
 		return 0
 	}
@@ -209,14 +209,14 @@ func (s Summary) calcAvg() float64 {
 }
 
 func (s Summary) calcVariance(avg float64) float64 {
-	var variance int
-	days := s.DaysFromFirstSeen(time.Now())
+	var variance float64
+	days := s.DaysInPeriod()
 	if days == 0 {
 		return 0
 	}
 	for _, day := range s.DaySummaries {
 		diff := float64(day.Total) - avg
-		variance += int(math.Pow(diff, 2))
+		variance += math.Pow(diff, 2)
 	}
-	return float64(variance / days)
+	return variance / float64(days)
 }
