@@ -36,15 +36,13 @@ func main() {
 	store = errorwatch.NewStore()
 	errs := store.Init()
 	if len(errs) > 0 {
-		log.Printf("Failed initializing Database: [%v]\n", errs)
-		return
+		log.Printf("There were problems initializing the database: [%v]\n", errs)
 	} else {
 		log.Println("Database initiliazed")
 	}
 	loadAll(findAllFilesToParse(oldLogsPath))
 	statEngine := errorwatch.NewStatEngine(store)
 	statEngine.Init()
-	statEngine.UpdateStats()
 	log.Printf("Stat Engine initialized")
 	notifier := errorwatch.NewConsoleNotifier(store.Notifications())
 	var eventProcess chan errorwatch.ErrorEvent = make(chan errorwatch.ErrorEvent)

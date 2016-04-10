@@ -45,8 +45,7 @@ func (s *StatItem) StdDevMax() int {
 
 type StatEngine interface {
 	Init()
-	calcStats(summary []Summary) []*StatItem
-	UpdateStats()
+	updateStats()
 	getStat(event *ErrorEvent) *StatItem
 	ListenOn(eventBus chan ErrorEvent, n Notifier)
 }
@@ -62,10 +61,10 @@ func NewStatEngine(s Store) StatEngine {
 }
 
 func (e *statEngine) Init() {
-	e.UpdateStats()
+	e.updateStats()
 }
 
-func (e *statEngine) UpdateStats() {
+func (e *statEngine) updateStats() {
 	err := e.store.UpdateDaySummaries()
 	if err == nil {
 		log.Println("Day summaries for errors updated")
@@ -118,7 +117,7 @@ func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
 		if cache.shouldReset(&now) {
 			cache.reset()
 		}
-		log.Printf("Processing: %v\n", event)
+		log.Printf("Processing: %v -  %v\n", event.Timestamp, event.Exception)
 		var statItem *StatItem = cache.get(&event)
 		if statItem == nil {
 			log.Printf("No Stat Item. Exception is propbably new. Notifying of: %v\n", event.Exception)
@@ -162,7 +161,7 @@ func (c *statCache) shouldReset(t *time.Time) bool {
 
 func (c *statCache) reset() {
 	c.start, c.cache = initStartAndMap()
-	c.engine.UpdateStats()
+	c.engine.updateStats()
 }
 
 func initStartAndMap() (*time.Time, map[string]*StatItem) {
@@ -189,6 +188,7 @@ func (c *statCache) get(event *ErrorEvent) *StatItem {
 func createMapWithSummaries(summaries []Summary) map[string]Summary {
 	var statMap map[string]Summary = make(map[string]Summary)
 	for _, s := range summaries {
+		log.Printf("Adding [%v] Summary with [%v] Day Summaries to Map", s.Exception, len(s.DaySummaries))
 		if _, ok := statMap[s.Exception]; !ok {
 			statMap[s.Exception] = s
 		}

@@ -160,10 +160,20 @@ func (store *dbStore) FetchSummaries() []Summary {
 	}
 	for rows.Next() {
 		var s Summary
-		rows.Scan(&s.StartDate, &s.Exception, &s.Total)
-		s.EndDate = time.Now()
-		s.DaySummaries = store.FetchDaySummariesByException(s.Exception)
-		summaries = append(summaries, s)
+		var tempDate string
+		err = rows.Scan(&tempDate, &s.Exception, &s.Total)
+		if err != nil {
+			log.Printf("Failed mapping summary: %v", err)
+		} else {
+			s.StartDate, err = toDate(tempDate)
+			if err != nil {
+				log.Printf("Unkown Date format in Day Summary: %v", err)
+			} else {
+				s.EndDate = time.Now()
+				s.DaySummaries = store.FetchDaySummariesByException(s.Exception)
+				summaries = append(summaries, s)
+			}
+		}
 	}
 	return summaries
 }
@@ -172,13 +182,19 @@ func (store *dbStore) FetchDaySummariesByException(excp string) []*DaySummary {
 	var summaries []*DaySummary
 	rows, err := store.db.Query("select * from error_day_summary where exception = ?", excp)
 	if err != nil {
+		log.Printf("Failed fetching Day Summaries for [%v]: %v", excp, err)
 		return summaries
 	}
 	for rows.Next() {
 		var s DaySummary
-		rows.Scan(&s.Id, &s.Date, &s.Exception, &s.Total)
-		summaries = append(summaries, &s)
+		err = rows.Scan(&s.Id, &s.Date, &s.Exception, &s.Total)
+		if err != nil {
+			log.Printf("Failed mapping Day Summary for [%v]: %v", excp, err)
+		} else {
+			summaries = append(summaries, &s)
+		}
 	}
+	log.Printf("Found and mapped %v Day Summaries for [%v]", len(summaries), excp)
 	return summaries
 }
 
@@ -277,7 +293,7 @@ func initDB() (*sql.DB, []error) {
 
 func hasTable(db *sql.DB, name string) bool {
 	var table string
-	err := db.QueryRow("select name FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&table)
+	err := db.QueryRow("select name FROM sqlite_master WHERE (type='table' OR type='view') AND name=?", name).Scan(&table)
 	table = strings.Trim(table, " ")
 	if err == sql.ErrNoRows || table == "" {
 		return false
