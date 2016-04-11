@@ -23,6 +23,7 @@ var ErrNotLogLine error = errors.New("Line does not match Log Line format")
 var ErrNotCausedByLine error = errors.New("Line does not match Caused by format or does not contain 'Caused by'")
 
 var LOG_LINE_REGEX = regexp.MustCompile(`^\[([\w\d\s-:,]+)\]\s(INFO|ERROR|TRACE|DEBUG)\s+([\w\d.:]+)\s-\s(.*)`)
+
 var CAUSED_BY_REGEX = regexp.MustCompile(`Caused by:\s([\w\d\.]+):?\s?(.*)`)
 
 type Event struct {
