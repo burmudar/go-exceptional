@@ -1,7 +1,9 @@
 package errorwatch
 
 import (
+	"database/sql"
 	"fmt"
+	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"net/smtp"
 	"time"
@@ -26,6 +28,24 @@ type EmailNotifier struct {
 
 type ConsoleNotifier struct {
 	store NotifyStore
+}
+
+type DatabaseNotifier struct {
+	host     string
+	username string
+	password string
+	to       string
+	store    NotifyStore
+}
+
+func NewDatabaseNotifier(host, username, password, to string, store NotifyStore) Notifier {
+	n := new(DatabaseNotifier)
+	n.host = host
+	n.username = username
+	n.password = password
+	n.to = to
+	n.store = store
+	return n
 }
 
 func NewEmailNotifier(from, pass, to string, store NotifyStore) Notifier {
@@ -69,6 +89,26 @@ func (n *EmailNotifier) Fire(notification *ErrorNotification) error {
 		n.store.UpdateNotificationSent(notification.ErrorEvent)
 		return nil
 	}
+}
+
+func (d *DatabaseNotifier) Fire(n *ErrorNotification) error {
+	db, err := sql.Open("mysql", fmt.Sprintf("%v:%v@tcp(%v:3306)/", d.username, d.password, d.host))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	err = db.Ping()
+	if err != nil {
+		return err
+	}
+	subject, body := n.describe()
+
+	_, err = db.Query("call common.sp_create_email_request(?, ?, ?, ?, ?, ?, ?, ?)", d.to, "", "", subject, body, "N", "test", "")
+	if err != nil {
+		return err
+	}
+	d.store.UpdateNotificationSent(n.ErrorEvent)
+	return nil
 }
 
 func (n *ErrorNotification) isNewError() bool {

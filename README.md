@@ -12,8 +12,9 @@ The Alarm for now, is a call to an external server which will notify whomever it
 What is working
 ===
 
-Not much :P
-
 *   Parsing of log files into log events [complete]
-*   Loading SQLIte database with logevents [incomplete]
-*   Sound alarm based on standard deviation [incomplete]
+*   Filter logevents into error events with Caused by [complete]
+*   Loading SQLIte database with error events [complete]
+*   Calculate daily summaries on events [complete]
+*   Statistics on exceptions [complete]
+*   Sound alarm based on standard deviation of exceptions [complete]
