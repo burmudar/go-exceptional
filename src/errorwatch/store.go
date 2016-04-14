@@ -55,13 +55,13 @@ var ErrTableExists error = errors.New("Not creating Table. Table already exists"
 
 type Store interface {
 	Init() []error
-	Errors() ErrorWatchStore
+	Errors() ErrorStore
 	Stats() StatStore
 	Notifications() NotifyStore
 }
 
-type ErrorWatchStore interface {
-	AddErrorEvent(e *ErrorEvent) error
+type ErrorStore interface {
+	Add(e *ErrorEvent) error
 }
 
 type StatStore interface {
@@ -93,7 +93,7 @@ func (s *dbStore) Init() []error {
 	return errors
 }
 
-func (s *dbStore) Errors() ErrorWatchStore {
+func (s *dbStore) Errors() ErrorStore {
 	return s
 }
 
@@ -238,7 +238,7 @@ func (store *dbStore) UpdateDaySummaries() error {
 	return err
 }
 
-func (store *dbStore) AddErrorEvent(e *ErrorEvent) error {
+func (store *dbStore) Add(e *ErrorEvent) error {
 	var count int
 	log.Printf("Inserting -> %v : %v\n", *e.Timestamp, e.Exception)
 	store.db.QueryRow(`select count(id) from error_events where event_datetime=? AND source=? AND description=? AND exception=? AND excp_description=?`,

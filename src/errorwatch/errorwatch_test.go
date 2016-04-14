@@ -5,17 +5,17 @@ import (
 	"time"
 )
 
-func TestParseLogLineWithEmptyLine(t *testing.T) {
-	_, err := ParseLogLine("")
+func TestparseLogLineWithEmptyLine(t *testing.T) {
+	_, err := parseLogLine("")
 
 	if err == nil {
 		t.Errorf("When line is empty. Error should be returned")
 	}
 }
 
-func TestParseLogLineOfINFOLine(t *testing.T) {
+func TestparseLogLineOfINFOLine(t *testing.T) {
 	const INFO_LINE string = "[2016-03-23 15:41:48,564] INFO  worker.DealerBalanceUpdater:27 - Starting update of dealer balance"
-	logEvent, err := ParseLogLine(INFO_LINE)
+	logEvent, err := parseLogLine(INFO_LINE)
 
 	if logEvent == nil && err == nil {
 		t.Errorf("When Event is nil, Error cannot be nil")
@@ -44,9 +44,9 @@ func TestParseLogLineOfINFOLine(t *testing.T) {
 	}
 }
 
-func TestParseLogLineOfTRACELine(t *testing.T) {
+func TestparseLogLineOfTRACELine(t *testing.T) {
 	const TRACE_LINE string = "[2016-03-23 15:41:48,608] TRACE worker.SimConsumerImpl:183 - null : Retrieving Balance of Sim id: 0 from Recharge Service"
-	logEvent, err := ParseLogLine(TRACE_LINE)
+	logEvent, err := parseLogLine(TRACE_LINE)
 
 	if logEvent == nil && err == nil {
 		t.Errorf("When Event is nil, Error cannot be nil")
@@ -77,7 +77,7 @@ func TestParseLogLineOfTRACELine(t *testing.T) {
 
 func TestParseLogLineOfDEBUGLine(t *testing.T) {
 	const DEBUG_LINE string = "[2016-03-23 15:41:48,615] DEBUG worker.SimConsumerImpl:129 - null : Sending recharge to service"
-	logEvent, err := ParseLogLine(DEBUG_LINE)
+	logEvent, err := parseLogLine(DEBUG_LINE)
 
 	if logEvent == nil && err == nil {
 		t.Errorf("When Event is nil, Error cannot be nil")
@@ -108,7 +108,7 @@ func TestParseLogLineOfDEBUGLine(t *testing.T) {
 
 func TestParseLogLineOfERRORLine(t *testing.T) {
 	const ERROR_LINE string = "[2016-03-23 15:41:48,939] ERROR client.AirtelService:54 - 0833574730 : Encountered an error while querying balance : TranRef[testRef]"
-	logEvent, err := ParseLogLine(ERROR_LINE)
+	logEvent, err := parseLogLine(ERROR_LINE)
 
 	if logEvent == nil && err == nil {
 		t.Errorf("When Event is nil, Error cannot be nil")
@@ -156,136 +156,92 @@ func TestToTimestamp(t *testing.T) {
 }
 
 func TestContainsCausedBy(t *testing.T) {
-	if ContainsCausedBy("caused by:") {
+	if containsCausedBy("caused by:") {
 		t.Errorf("Should only return true when string contains 'Caused by:' case sensitive")
 	}
-	if ContainsCausedBy("") {
+	if containsCausedBy("") {
 		t.Errorf("Empty string does not contain 'Caused by:'")
 	}
-	if !ContainsCausedBy("      Caused by:") {
+	if !containsCausedBy("      Caused by:") {
 		t.Errorf("String with whitespace before 'Caused by:' is valid and should not be rejected")
 	}
-	if !ContainsCausedBy("Caused by:") {
+	if !containsCausedBy("Caused by:") {
 		t.Errorf("String containing exact 'Caused by:' should not be rejected")
 	}
 
 }
 
-func TestExtractCausedBy(t *testing.T) {
+func TestHasCausedBy(t *testing.T) {
+	event := new(ErrorEvent)
+
+	if event.hasCausedBy() {
+		t.Errorf("Should be false when exception and detail are empty")
+	}
+
+	event.Exception = "some exception"
+	if !event.hasCausedBy() {
+		t.Errorf("Should be true when exception has a value")
+	}
+
+	event.Detail = "some detail"
+	if !event.hasCausedBy() {
+		t.Errorf("Should be true when exception and detail have values")
+	}
+}
+
+func TestParsedCausedBy(t *testing.T) {
 	var NORMAL_CAUSED_BY string = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
 	var CAUSED_BY_WITH_MULTIPLE_COLONS string = "Caused by: com.flickswitch.sc.provider.ProviderServiceException: com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
 	var CAUSED_BY_WITHOUT_DETAIL string = "Caused by: javax.xml.bind.UnmarshalException"
 	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL string = "Caused by:"
+	var event *ErrorEvent = new(ErrorEvent)
 
-	causedBy, err := extractCausedBy(NORMAL_CAUSED_BY)
-	if causedBy == nil {
-		t.Errorf("No Caused By extracted from valid Caused by line: [%v]\n", NORMAL_CAUSED_BY)
-	}
-	if causedBy == nil && err == nil {
-		t.Errorf("When Caused By is nil, Error cannot be nil")
+	err := parseCausedBy(NORMAL_CAUSED_BY, event)
+	if !event.hasCausedBy() {
+		t.Errorf("No Caused By extracted from valid Caused by line: [%v]. Got %v | %v", NORMAL_CAUSED_BY, event.Exception, event.Detail)
 	}
 	expectedException := "com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException"
-	if causedBy.Exception != expectedException {
-		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, causedBy.Exception)
+	if event.Exception != expectedException {
+		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, event.Exception)
 	}
 	expectedDetail := "UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
-	if causedBy.Detail != expectedDetail {
-		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, causedBy.Detail)
+	if event.Detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, event.Detail)
 	}
 
-	causedBy, err = extractCausedBy(CAUSED_BY_WITHOUT_DETAIL)
+	err = parseCausedBy(CAUSED_BY_WITHOUT_DETAIL, event)
 
-	if causedBy == nil {
+	if !event.hasCausedBy() {
 		t.Errorf("No Caused By extracted from valid Caused by line: [%v]\n", CAUSED_BY_WITHOUT_DETAIL)
 	}
-	if causedBy == nil && err == nil {
-		t.Errorf("When Caused By is nil, Error cannot be nil")
-	}
 	expectedException = "javax.xml.bind.UnmarshalException"
-	if causedBy.Exception != expectedException {
-		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, causedBy.Exception)
+	if event.Exception != expectedException {
+		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, event.Exception)
 	}
 	expectedDetail = ""
-	if causedBy.Detail != expectedDetail {
-		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, causedBy.Detail)
+	if event.Detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, event.Detail)
 	}
-	causedBy, err = extractCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL)
-	if causedBy != nil {
-		t.Errorf("Caused by with no exception nor detail is invalid and should return nil. Got [%v]\n", causedBy)
-	}
+
+	err = parseCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
 	if err == nil {
-		t.Errorf("Caused by with no exception nor detail should return Error containing the reason")
+		t.Errorf("Caused by with no exception nor detail is invalid and should return err. Got [%v]\n", err)
 	}
-	causedBy, err = extractCausedBy("")
-	if causedBy != nil {
-		t.Errorf("Empty string is not a valid Caused By. Got [%v]\n", causedBy)
+
+	err = parseCausedBy("", event)
+	if err == nil {
+		t.Errorf("Empty string is not a valid Caused By Error should not be nil")
 	}
 	if err == nil {
 		t.Errorf("Empty caused by should return an error")
 	}
 
-	causedBy, err = extractCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS)
-	if causedBy.Exception != "com.flickswitch.sc.provider.ProviderServiceException" {
+	err = parseCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS, event)
+	if event.Exception != "com.flickswitch.sc.provider.ProviderServiceException" {
 		t.Errorf("Incorrect exception extracted from Caused by with multiple colons")
 	}
 	expectedDetail = "com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
-	if causedBy.Detail != expectedDetail {
-		t.Errorf("Incorrect detail extracted from Caused by with multiple colons. [%v] != [%v]\n", expectedDetail, causedBy.Detail)
+	if event.Detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted from Caused by with multiple colons. [%v] != [%v]\n", expectedDetail, event.Detail)
 	}
-}
-
-func TestParseCausedBy(t *testing.T) {
-	const ERROR_LINE string = "[2016-03-23 15:41:48,939] ERROR client.AirtelService:54 - 0833574730 : Encountered an error while querying balance : TranRef[testRef]"
-	var NORMAL_CAUSED_BY = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
-	var CAUSED_BY_WITHOUT_DETAIL = "Caused by: javax.xml.bind.UnmarshalException"
-	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL = "Caused by:"
-
-	event, err := ParseLogLine(ERROR_LINE)
-
-	errorEvent, err := ParseCausedBy(NORMAL_CAUSED_BY, event)
-	causedBy, _ := extractCausedBy(NORMAL_CAUSED_BY)
-
-	if err != nil {
-		t.Errorf("Failed creating ErrorEvent with Caused By from [%v]\n", NORMAL_CAUSED_BY)
-	} else if errorEvent == nil {
-		t.Errorf("ErrorEvent cannot be nil, if error is nil")
-	}
-
-	if errorEvent.Exception != causedBy.Exception {
-		t.Errorf("ErrorEvent does not contain Caused By Exception. Expected: [%v] Got: [%v]\n", errorEvent.Exception, causedBy.Exception)
-	}
-
-	if errorEvent.Detail != causedBy.Detail {
-		t.Errorf("ErrorEvent does not contain Caused By Detail. Expected: [%v] Got: [%v]\n", errorEvent.Detail, causedBy.Detail)
-	}
-
-	errorEvent, err = ParseCausedBy(CAUSED_BY_WITHOUT_DETAIL, event)
-	causedBy, _ = extractCausedBy(CAUSED_BY_WITHOUT_DETAIL)
-
-	if err != nil {
-		t.Errorf("Failed creating ErrorEvent with Caused By from [%v]\n", NORMAL_CAUSED_BY)
-	} else if errorEvent == nil {
-		t.Errorf("ErrorEvent cannot be nil, if error is nil")
-	}
-
-	if errorEvent.Exception != causedBy.Exception {
-		t.Errorf("ErrorEvent does not contain Caused By Exception. Expected: [%v] Got: [%v]\n", errorEvent.Exception, causedBy.Exception)
-	}
-
-	if errorEvent.Detail != causedBy.Detail {
-		t.Errorf("ErrorEvent does not contain Caused By Detail. Expected: [%v] Got: [%v]\n", errorEvent.Detail, causedBy.Detail)
-	}
-
-	errorEvent, err = ParseCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
-	if err == nil {
-		t.Errorf("When CausedBy parsing fails, error shoudl be returned")
-	} else if errorEvent != nil {
-		t.Errorf("When Error is not nil, no ErrorEvent should be returned")
-	}
-
-	errorEvent, err = ParseCausedBy(NORMAL_CAUSED_BY, nil)
-	if err == nil {
-		t.Errorf("Error should be returned when given Event is nil")
-	}
-
 }

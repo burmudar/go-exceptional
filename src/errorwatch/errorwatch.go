@@ -1,8 +1,11 @@
 package errorwatch
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -26,32 +29,90 @@ var LOG_LINE_REGEX = regexp.MustCompile(`^\[([\w\d\s-:,]+)\]\s(INFO|ERROR|TRACE|
 
 var CAUSED_BY_REGEX = regexp.MustCompile(`Caused by:\s([\w\d\.]+):?\s?(.*)`)
 
-type Event struct {
+type ErrorParser interface {
+	Parse(src *os.File) ParseStats
+}
+
+type LogFileParser struct {
+	store ErrorStore
+}
+
+type TailFileParser struct {
+	store ErrorStore
+}
+
+type ErrorEvent struct {
+	Exception   string
+	Detail      string
 	Timestamp   *time.Time
 	Level       Level
 	Source      string
 	Description string
 }
 
-type causedBy struct {
-	Exception string
-	Detail    string
+type ParseStats struct {
+	Lines   int
+	Failed  int
+	Success int
 }
 
-type ErrorEvent struct {
-	Event
-	causedBy
+func (p *ParseStats) string() string {
+	return fmt.Sprintf("Lines [%v] Failed [%v] Succeeded[%v]", p.Lines, p.Failed, p.Success)
 }
 
-func (e *Event) string() string {
+func (e *ErrorEvent) string() string {
 	return fmt.Sprintf("Event: %v | %v | %v | %v", e.Timestamp, e.Level, e.Source, e.Description)
 }
 
-func ParseLogLine(line string) (*Event, error) {
+func (e *ErrorEvent) hasCausedBy() bool {
+	if e.Exception != "" {
+		return true
+	}
+	return false
+}
+
+func (p *LogFileParser) Parse(src *os.File) ParseStats {
+	scanner := bufio.NewScanner(src)
+	var event *ErrorEvent = nil
+	var stats ParseStats
+	for scanner.Scan() {
+		line := scanner.Text()
+		stats.Lines++
+		e, err := parseLogLine(line)
+		if err != nil {
+			stats.Failed++
+		} else {
+			event = e
+		}
+		err = addCausedBy(line, event)
+		if err != nil {
+			continue
+		}
+		err = p.store.Add(event)
+		if err != nil {
+			log.Printf("Failed inserting Event[%v - %v]", event.Timestamp, event.Exception)
+		}
+	}
+	return stats
+}
+
+func addCausedBy(line string, event *ErrorEvent) error {
+	if containsCausedBy(line) {
+		err := parseCausedBy(line, event)
+		if err != nil {
+			return err
+		} else {
+			return nil
+		}
+	}
+	return ErrNotCausedByLine
+}
+
+func parseLogLine(line string) (*ErrorEvent, error) {
 	if !LOG_LINE_REGEX.MatchString(line) {
 		return nil, ErrNotLogLine
 	}
-	event := new(Event)
+	event := new(ErrorEvent)
 
 	matches := LOG_LINE_REGEX.FindStringSubmatch(line)
 
@@ -75,51 +136,26 @@ func ParseLogLine(line string) (*Event, error) {
 	return event, nil
 }
 
-func ParseCausedBy(line string, e *Event) (*ErrorEvent, error) {
+func parseCausedBy(line string, e *ErrorEvent) error {
 	if e == nil {
-		return nil, errors.New("Cannot create ErrorEvent with nil event")
+		return errors.New("Cannot create ErrorEvent with nil event")
 	}
-	c, err := extractCausedBy(line)
-	if err != nil {
-		return nil, err
-	}
-	errorEvent := newErrorEvent(e, c)
-
-	return errorEvent, nil
-}
-
-func newErrorEvent(e *Event, c *causedBy) *ErrorEvent {
-	ee := new(ErrorEvent)
-	ee.Timestamp = e.Timestamp
-	ee.Level = e.Level
-	ee.Source = e.Source
-	ee.Description = e.Description
-	ee.Exception = c.Exception
-	ee.Detail = c.Detail
-	return ee
-}
-
-func (c *causedBy) isEmpty() bool {
-	return c.Exception == "" && c.Detail == ""
-}
-
-func extractCausedBy(line string) (*causedBy, error) {
 	if !CAUSED_BY_REGEX.MatchString(line) {
-		return nil, ErrNotCausedByLine
+		return ErrNotCausedByLine
 	}
-	c := new(causedBy)
 	matches := CAUSED_BY_REGEX.FindStringSubmatch(line)
-	c.Exception = matches[1]
+	e.Exception = matches[1]
+	e.Detail = ""
 	if len(matches) > 2 {
-		c.Detail = matches[2]
+		e.Detail = matches[2]
 	}
-	if c.isEmpty() {
-		return nil, errors.New("No exception nor detail extracted from: " + line)
+	if e.hasCausedBy() {
+		return errors.New("No exception nor detail extracted from: " + line)
 	}
-	return c, nil
+	return nil
 }
 
-func ContainsCausedBy(line string) bool {
+func containsCausedBy(line string) bool {
 	line = strings.TrimLeft(line, " ")
 	if strings.HasPrefix(line, CAUSED_BY) {
 		return true
