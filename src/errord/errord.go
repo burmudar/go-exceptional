@@ -1,9 +1,10 @@
-package errorwatch
+package errord
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/hpcloud/tail"
 	"log"
 	"os"
 	"regexp"
@@ -30,14 +31,11 @@ var LOG_LINE_REGEX = regexp.MustCompile(`^\[([\w\d\s-:,]+)\]\s(INFO|ERROR|TRACE|
 var CAUSED_BY_REGEX = regexp.MustCompile(`Caused by:\s([\w\d\.]+):?\s?(.*)`)
 
 type ErrorParser interface {
-	Parse(src *os.File) ParseStats
+	Parse(src string) ParseStats
+	Watch(src string) chan ErrorEvent
 }
 
 type LogFileParser struct {
-	store ErrorStore
-}
-
-type TailFileParser struct {
 	store ErrorStore
 }
 
@@ -71,10 +69,20 @@ func (e *ErrorEvent) hasCausedBy() bool {
 	return false
 }
 
-func (p *LogFileParser) Parse(src *os.File) ParseStats {
-	scanner := bufio.NewScanner(src)
+func NewLogFileParser(store ErrorStore) ErrorParser {
+	return &LogFileParser{store}
+}
+
+func (p *LogFileParser) Parse(src string) ParseStats {
 	var event *ErrorEvent = nil
 	var stats ParseStats
+	file, err := os.Open(src)
+	defer file.Close()
+	if err != nil {
+		log.Printf("Error occured while opening '%v' for reading. Error: %v", src, err)
+		return stats
+	}
+	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 		stats.Lines++
@@ -94,6 +102,34 @@ func (p *LogFileParser) Parse(src *os.File) ParseStats {
 		}
 	}
 	return stats
+}
+
+func (p *LogFileParser) Watch(src string) chan ErrorEvent {
+	errorChan := make(chan ErrorEvent)
+
+	//Should add some way to stop go routine. Maybe store the Tail t variable since it might have a stop method ?
+	go func() {
+		t, _ := tail.TailFile(src, tail.Config{Follow: true, ReOpen: true})
+		var event *ErrorEvent = nil
+		for l := range t.Lines {
+			line := l.Text
+			e, err := parseLogLine(line)
+			if err != nil {
+			} else {
+				event = e
+			}
+			err = addCausedBy(line, event)
+			if err != nil {
+				continue
+			}
+			err = p.store.Add(event)
+			if err != nil {
+				log.Printf("Failed inserting Event[%v - %v]", event.Timestamp, event.Exception)
+				errorChan <- *event
+			}
+		}
+	}()
+	return errorChan
 }
 
 func addCausedBy(line string, event *ErrorEvent) error {

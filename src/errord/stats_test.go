@@ -1,4 +1,4 @@
-package errorwatch
+package errord
 
 import (
 	"math"

@@ -1,5 +1,4 @@
-// Package stats provides ...
-package errorwatch
+package errord
 
 import (
 	"log"
