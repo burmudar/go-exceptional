@@ -54,7 +54,7 @@ type ParseStats struct {
 	Success int
 }
 
-func (p *ParseStats) string() string {
+func (p ParseStats) string() string {
 	return fmt.Sprintf("Lines [%v] Failed [%v] Succeeded[%v]", p.Lines, p.Failed, p.Success)
 }
 
@@ -99,6 +99,8 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 		err = p.store.Add(event)
 		if err != nil {
 			log.Printf("Failed inserting Event[%v - %v]", event.Timestamp, event.Exception)
+		} else {
+			stats.Success++
 		}
 	}
 	return stats
@@ -133,10 +135,17 @@ func (p *LogFileParser) Watch(src string) chan ErrorEvent {
 }
 
 func addCausedBy(line string, event *ErrorEvent) error {
+	if event == nil {
+		return errors.New("Cannot create ErrorEvent with nil event")
+	}
 	if containsCausedBy(line) {
-		err := parseCausedBy(line, event)
+		excp, detail, err := parseCausedBy(line)
+		event.Exception = excp
+		event.Detail = detail
 		if err != nil {
 			return err
+		} else if !event.hasCausedBy() {
+			return errors.New("No exception nor detail extracted from: " + line)
 		} else {
 			return nil
 		}
@@ -172,23 +181,18 @@ func parseLogLine(line string) (*ErrorEvent, error) {
 	return event, nil
 }
 
-func parseCausedBy(line string, e *ErrorEvent) error {
-	if e == nil {
-		return errors.New("Cannot create ErrorEvent with nil event")
-	}
+func parseCausedBy(line string) (excp, detail string, err error) {
+	excp = ""
+	detail = ""
 	if !CAUSED_BY_REGEX.MatchString(line) {
-		return ErrNotCausedByLine
+		return excp, detail, ErrNotCausedByLine
 	}
 	matches := CAUSED_BY_REGEX.FindStringSubmatch(line)
-	e.Exception = matches[1]
-	e.Detail = ""
-	if len(matches) > 2 {
-		e.Detail = matches[2]
+	excp = matches[1]
+	if len(matches) >= 2 {
+		detail = matches[2]
 	}
-	if e.hasCausedBy() {
-		return errors.New("No exception nor detail extracted from: " + line)
-	}
-	return nil
+	return excp, detail, nil
 }
 
 func containsCausedBy(line string) bool {

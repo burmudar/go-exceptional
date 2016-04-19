@@ -194,54 +194,96 @@ func TestParsedCausedBy(t *testing.T) {
 	var CAUSED_BY_WITH_MULTIPLE_COLONS string = "Caused by: com.flickswitch.sc.provider.ProviderServiceException: com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
 	var CAUSED_BY_WITHOUT_DETAIL string = "Caused by: javax.xml.bind.UnmarshalException"
 	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL string = "Caused by:"
-	var event *ErrorEvent = new(ErrorEvent)
 
-	err := parseCausedBy(NORMAL_CAUSED_BY, event)
-	if !event.hasCausedBy() {
-		t.Errorf("No Caused By extracted from valid Caused by line: [%v]. Got %v | %v", NORMAL_CAUSED_BY, event.Exception, event.Detail)
-	}
-	expectedException := "com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException"
-	if event.Exception != expectedException {
-		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, event.Exception)
-	}
-	expectedDetail := "UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
-	if event.Detail != expectedDetail {
-		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, event.Detail)
+	excp, detail, err := parseCausedBy(NORMAL_CAUSED_BY)
+	if excp == "" && detail == "" {
+		t.Errorf("No Caused By extracted from valid Caused by line: [%v]. Got %v | %v", NORMAL_CAUSED_BY, excp, detail)
 	}
 
-	err = parseCausedBy(CAUSED_BY_WITHOUT_DETAIL, event)
+	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_DETAIL)
 
-	if !event.hasCausedBy() {
-		t.Errorf("No Caused By extracted from valid Caused by line: [%v]\n", CAUSED_BY_WITHOUT_DETAIL)
+	expectedException := "javax.xml.bind.UnmarshalException"
+	if excp != expectedException {
+		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, excp)
 	}
-	expectedException = "javax.xml.bind.UnmarshalException"
-	if event.Exception != expectedException {
-		t.Errorf("Incorrect exception extracted. Expected: [%v] got [%v]\n", expectedException, event.Exception)
-	}
-	expectedDetail = ""
-	if event.Detail != expectedDetail {
-		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, event.Detail)
+	expectedDetail := ""
+	if detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted. Expected: [%v] got [%v]\n", expectedDetail, detail)
 	}
 
-	err = parseCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
+	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL)
 	if err == nil {
 		t.Errorf("Caused by with no exception nor detail is invalid and should return err. Got [%v]\n", err)
 	}
+	if excp != "" && detail != "" {
+		t.Errorf("Exception and detail should be empty strings on caused by with no exception or detail")
+	}
 
-	err = parseCausedBy("", event)
+	excp, detail, err = parseCausedBy("")
 	if err == nil {
 		t.Errorf("Empty string is not a valid Caused By Error should not be nil")
 	}
-	if err == nil {
-		t.Errorf("Empty caused by should return an error")
-	}
 
-	err = parseCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS, event)
-	if event.Exception != "com.flickswitch.sc.provider.ProviderServiceException" {
+	excp, detail, err = parseCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS)
+	if excp != "com.flickswitch.sc.provider.ProviderServiceException" {
 		t.Errorf("Incorrect exception extracted from Caused by with multiple colons")
 	}
 	expectedDetail = "com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
-	if event.Detail != expectedDetail {
-		t.Errorf("Incorrect detail extracted from Caused by with multiple colons. [%v] != [%v]\n", expectedDetail, event.Detail)
+	if detail != expectedDetail {
+		t.Errorf("Incorrect detail extracted from Caused by with multiple colons. [%v] != [%v]\n", expectedDetail, detail)
 	}
+}
+
+func TestAddCausedBy(t *testing.T) {
+	var NORMAL_CAUSED_BY string = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
+	var CAUSED_BY_WITH_MULTIPLE_COLONS string = "Caused by: com.flickswitch.sc.provider.ProviderServiceException: com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
+	var CAUSED_BY_WITHOUT_DETAIL string = "Caused by: javax.xml.bind.UnmarshalException"
+	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL string = "Caused by:"
+	var event *ErrorEvent = new(ErrorEvent)
+
+	excp, detail, err := parseCausedBy(NORMAL_CAUSED_BY)
+	err = addCausedBy(NORMAL_CAUSED_BY, event)
+	if excp != event.Exception && detail != event.Detail {
+		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, event)
+	}
+	if event.hasCausedBy() && err != nil {
+		t.Errorf("Received error when adding Caused By, event though event reports it has caused by")
+	}
+
+	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_DETAIL)
+	err = addCausedBy(CAUSED_BY_WITHOUT_DETAIL, event)
+	if excp != event.Exception && detail != event.Detail {
+		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, event)
+	}
+	if event.hasCausedBy() && err != nil {
+		t.Errorf("Received error when adding Caused By, event though event reports it has caused by")
+	}
+
+	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL)
+	err = addCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
+	if err == nil {
+		t.Errorf("Caused by with no exception nor detail is invalid and should return err. Got [%v]\n", err)
+	}
+	if !event.hasCausedBy() && err == nil {
+		t.Errorf("When event report it has no Caused By after add, err should not be nil")
+	}
+
+	excp, detail, err = parseCausedBy("")
+	err = addCausedBy("", event)
+	if err == nil {
+		t.Errorf("Empty string is not a valid Caused By Error should not be nil")
+	}
+	if !event.hasCausedBy() && err == nil {
+		t.Errorf("When event report it has no Caused By after add, err should not be nil")
+	}
+
+	excp, detail, err = parseCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS)
+	err = addCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS, event)
+	if excp != event.Exception && detail != event.Detail {
+		t.Errorf("Exception [%v] Detail [%v] not added to event.", excp, detail, event)
+	}
+	if event.hasCausedBy() && err != nil {
+		t.Errorf("Received error when adding Caused By, event though event reports it has caused by")
+	}
+
 }
