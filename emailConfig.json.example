@@ -1,0 +1,6 @@
+{
+    "Host": "smtp.gmail.com",
+    "From": "username",
+    "Pass": "some password",
+    "To": "to@address.com"
+}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errord"
 	"errors"
 	"flag"
 	_ "github.com/mattn/go-sqlite3"
+	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -19,10 +21,23 @@ var ErrNotCausedByLine error = errors.New("Line does not contain 'Caused by'")
 
 var oldLogsPath = ""
 var tailPath = ""
+var emailConfigPath = ""
+
+type EmailConfig struct {
+	Host string
+	From string
+	Pass string
+	To   string
+}
+
+func (c EmailConfig) isEmpty() bool {
+	return c.Host == "" && c.From == "" && c.Pass == "" && c.To == ""
+}
 
 func init() {
 	flag.StringVar(&oldLogsPath, "oldLogs", "", "Directory where old .log files are stored and need to be parsed")
 	flag.StringVar(&tailPath, "tailFile", "", "location of file to tail and watch")
+	flag.StringVar(&emailConfigPath, "emailConfig", "", "Path to email config json. If empty, notifications are written to stdout")
 }
 
 func main() {
@@ -46,12 +61,36 @@ func main() {
 	statEngine := errord.NewStatEngine(store)
 	statEngine.Init()
 	log.Printf("Stat Engine initialized")
-	notifier := errord.NewConsoleNotifier(store.Notifications())
+	notifier := createNotifier(emailConfigPath, store.Notifications())
 	log.Printf("Watching %v", tailPath)
 	logParser := errord.NewLogFileParser(store.Errors())
 	eventChan := logParser.Watch(tailPath)
 	log.Printf("Stat Engine listening for events from watched file")
-	go statEngine.ListenOn(eventChan, notifier)
+	statEngine.ListenOn(eventChan, notifier)
+}
+
+func readEmailConfig(path string) EmailConfig {
+	var config EmailConfig
+	if path == "" {
+		return config
+	}
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Printf("Failed reading file: %v - %v", path, err)
+	} else {
+		json.Unmarshal(content, &config)
+	}
+	return config
+}
+
+func createNotifier(emailConfigPath string, store errord.NotifyStore) errord.Notifier {
+	c := readEmailConfig(emailConfigPath)
+	if c.isEmpty() {
+		log.Printf("Email Config is empty. Creating Console Notifier")
+		return errord.NewConsoleNotifier(store)
+	}
+	log.Printf("Creating Email Config notifier")
+	return errord.NewEmailNotifier(c.Host, c.From, c.Pass, c.To, store)
 }
 
 func findAllFilesToParse(dir string) []string {

@@ -20,6 +20,7 @@ type ErrorNotification struct {
 }
 
 type EmailNotifier struct {
+	host     string
 	from     string
 	password string
 	to       string
@@ -48,8 +49,9 @@ func NewDatabaseNotifier(host, username, password, to string, store NotifyStore)
 	return n
 }
 
-func NewEmailNotifier(from, pass, to string, store NotifyStore) Notifier {
+func NewEmailNotifier(host, from, pass, to string, store NotifyStore) Notifier {
 	n := new(EmailNotifier)
+	n.host = host
 	n.from = from
 	n.to = to
 	n.password = pass
@@ -82,8 +84,8 @@ func (n *EmailNotifier) Fire(notification *ErrorNotification) error {
 	}
 
 	subject, body := notification.describe()
-	msg := fmt.Sprintf("From: %v\nTo: %v\nSubject: %v\n\n%v", n.from, n.to, subject, body)
-	if err := smtp.SendMail("smtp.gmail.com:587", smtp.PlainAuth("", n.from, n.password, "smtp.gmail.com"), n.from, []string{n.to}, []byte(msg)); err != nil {
+	msg := fmt.Sprintf("From: %v\r\nTo: %v\r\nSubject: %v\r\n\r\n%v\r\n", n.from, n.to, subject, body)
+	if err := smtp.SendMail(n.host+":587", smtp.PlainAuth("", n.from, n.password, n.host), n.from, []string{n.to}, []byte(msg)); err != nil {
 		return err
 	} else {
 		n.store.UpdateNotificationSent(notification.ErrorEvent)
