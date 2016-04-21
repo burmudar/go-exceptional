@@ -126,7 +126,7 @@ func (p *LogFileParser) Watch(src string) chan ErrorEvent {
 			}
 			err = p.store.Add(event)
 			if err != nil {
-				log.Printf("Failed inserting Event[%v - %v]", event.Timestamp, event.Exception)
+				log.Printf("Failed inserting Event[%v - %v] -> %v", event.Timestamp, event.Exception, err)
 				errorChan <- *event
 			}
 		}
