@@ -17,7 +17,7 @@ const SQL_TABLE_ERROR_EVENTS string = `create table error_events
 		description VARCHAR(255) not null,
 		exception VARCHAR(255) not null,
 		excp_description VARCHAR(255) not null,
-		unique(event_datetime, source, description)
+		unique(event_datetime, exception, excp_description)
 	)
 	`
 const SQL_TABLE_NOTIFICATIONS string = `create table notifications(
