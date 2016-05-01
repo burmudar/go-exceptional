@@ -242,7 +242,7 @@ func TestAddCausedBy(t *testing.T) {
 	var event *ErrorEvent = new(ErrorEvent)
 
 	excp, detail, err := parseCausedBy(NORMAL_CAUSED_BY)
-	err = addCausedBy(NORMAL_CAUSED_BY, event)
+	err = addIfCausedBy(NORMAL_CAUSED_BY, event)
 	if excp != event.Exception && detail != event.Detail {
 		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, event)
 	}
@@ -251,7 +251,7 @@ func TestAddCausedBy(t *testing.T) {
 	}
 
 	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_DETAIL)
-	err = addCausedBy(CAUSED_BY_WITHOUT_DETAIL, event)
+	err = addIfCausedBy(CAUSED_BY_WITHOUT_DETAIL, event)
 	if excp != event.Exception && detail != event.Detail {
 		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, event)
 	}
@@ -260,7 +260,7 @@ func TestAddCausedBy(t *testing.T) {
 	}
 
 	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL)
-	err = addCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
+	err = addIfCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
 	if err == nil {
 		t.Errorf("Caused by with no exception nor detail is invalid and should return err. Got [%v]\n", err)
 	}
@@ -269,7 +269,7 @@ func TestAddCausedBy(t *testing.T) {
 	}
 
 	excp, detail, err = parseCausedBy("")
-	err = addCausedBy("", event)
+	err = addIfCausedBy("", event)
 	if err == nil {
 		t.Errorf("Empty string is not a valid Caused By Error should not be nil")
 	}
@@ -278,7 +278,7 @@ func TestAddCausedBy(t *testing.T) {
 	}
 
 	excp, detail, err = parseCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS)
-	err = addCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS, event)
+	err = addIfCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS, event)
 	if excp != event.Exception && detail != event.Detail {
 		t.Errorf("Exception [%v] Detail [%v] not added to event.", excp, detail, event)
 	}

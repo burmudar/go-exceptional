@@ -32,7 +32,7 @@ var CAUSED_BY_REGEX = regexp.MustCompile(`Caused by:\s([\w\d\.]+):?\s?(.*)`)
 
 type ErrorParser interface {
 	Parse(src string) ParseStats
-	Watch(eventBus chan ErrorEvent, src string)
+	Watch(src string) chan ErrorEvent
 }
 
 type LogFileParser struct {
@@ -87,7 +87,7 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 		line := scanner.Text()
 		stats.Lines++
 		logLine, err := parseLogLine(line)
-		if err == nil {
+		if err != nil {
 			stats.Failed++
 		} else {
 			event = logLine
@@ -106,27 +106,31 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 	return stats
 }
 
-func (p *LogFileParser) Watch(eventBus chan ErrorEvent, src string) {
+func (p *LogFileParser) Watch(src string) chan ErrorEvent {
 	//Should add some way to stop go routine. Maybe store the Tail t variable since it might have a stop method ?
-	t, _ := tail.TailFile(src, tail.Config{Follow: true, ReOpen: true})
-	var event *ErrorEvent = nil
-	for l := range t.Lines {
-		line := l.Text
-		logLine, err := parseLogLine(line)
-		if err == nil && logLine.Level == ERROR_LOG_LEVEL {
-			event = logLine
+	eventBus := make(chan ErrorEvent)
+	go func() {
+		t, _ := tail.TailFile(src, tail.Config{Follow: true, ReOpen: true})
+		var event *ErrorEvent = nil
+		for l := range t.Lines {
+			line := l.Text
+			logLine, err := parseLogLine(line)
+			if err == nil && logLine.Level == ERROR_LOG_LEVEL {
+				event = logLine
+			}
+			err = addIfCausedBy(line, event)
+			if err != nil {
+				continue
+			}
+			err = p.store.Add(event)
+			if err != nil {
+				log.Printf("Failed inserting Event[%v - %v] -> %v", event.Timestamp, event.Exception, err)
+			}
+			log.Printf("Passing Event to ErrorChan!")
+			eventBus <- *event
 		}
-		err = addIfCausedBy(line, event)
-		if err != nil {
-			continue
-		}
-		err = p.store.Add(event)
-		if err != nil {
-			log.Printf("Failed inserting Event[%v - %v] -> %v", event.Timestamp, event.Exception, err)
-		}
-		log.Printf("Passing Event to ErrorChan!")
-		eventBus <- *event
-	}
+	}()
+	return eventBus
 }
 
 func addIfCausedBy(line string, event *ErrorEvent) error {

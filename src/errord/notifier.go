@@ -85,9 +85,12 @@ func (n *EmailNotifier) Fire(notification *ErrorNotification) error {
 
 	subject, body := notification.describe()
 	msg := fmt.Sprintf("From: %v\r\nTo: %v\r\nSubject: %v\r\n\r\n%v\r\n", n.from, n.to, subject, body)
+	log.Printf("Sending Notifcation via Email\n")
 	if err := smtp.SendMail(n.host+":587", smtp.PlainAuth("", n.from, n.password, n.host), n.from, []string{n.to}, []byte(msg)); err != nil {
+		log.Printf("Failed sending email -> %v\n", err)
 		return err
 	} else {
+		log.Printf("Notification Sent! Updating Store\n")
 		n.store.UpdateNotificationSent(notification.ErrorEvent)
 		return nil
 	}
