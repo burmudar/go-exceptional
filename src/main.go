@@ -62,11 +62,11 @@ func main() {
 	statEngine.Init()
 	log.Printf("Stat Engine initialized")
 	notifier := createNotifier(emailConfigPath, store.Notifications())
+	log.Printf("Stat Engine listening for events from event bus")
+	eventBus := statEngine.Listen(notifier)
 	log.Printf("Watching %v", tailPath)
 	logParser := errord.NewLogFileParser(store.Errors())
-	eventChan := logParser.Watch(tailPath)
-	log.Printf("Stat Engine listening for events from watched file")
-	statEngine.ListenOn(eventChan, notifier)
+	logParser.Watch(eventBus, tailPath)
 }
 
 func readEmailConfig(path string) EmailConfig {

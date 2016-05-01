@@ -32,7 +32,7 @@ var CAUSED_BY_REGEX = regexp.MustCompile(`Caused by:\s([\w\d\.]+):?\s?(.*)`)
 
 type ErrorParser interface {
 	Parse(src string) ParseStats
-	Watch(src string) chan ErrorEvent
+	Watch(eventBus chan ErrorEvent, src string)
 }
 
 type LogFileParser struct {
@@ -86,13 +86,13 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 	for scanner.Scan() {
 		line := scanner.Text()
 		stats.Lines++
-		e, err := parseLogLine(line)
-		if err != nil {
+		logLine, err := parseLogLine(line)
+		if err == nil {
 			stats.Failed++
 		} else {
-			event = e
+			event = logLine
 		}
-		err = addCausedBy(line, event)
+		err = addIfCausedBy(line, event)
 		if err != nil {
 			continue
 		}
@@ -106,35 +106,30 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 	return stats
 }
 
-func (p *LogFileParser) Watch(src string) chan ErrorEvent {
-	errorChan := make(chan ErrorEvent)
-
+func (p *LogFileParser) Watch(eventBus chan ErrorEvent, src string) {
 	//Should add some way to stop go routine. Maybe store the Tail t variable since it might have a stop method ?
-	go func() {
-		t, _ := tail.TailFile(src, tail.Config{Follow: true, ReOpen: true})
-		var event *ErrorEvent = nil
-		for l := range t.Lines {
-			line := l.Text
-			e, err := parseLogLine(line)
-			if err != nil {
-			} else {
-				event = e
-			}
-			err = addCausedBy(line, event)
-			if err != nil {
-				continue
-			}
-			err = p.store.Add(event)
-			if err != nil {
-				log.Printf("Failed inserting Event[%v - %v] -> %v", event.Timestamp, event.Exception, err)
-				errorChan <- *event
-			}
+	t, _ := tail.TailFile(src, tail.Config{Follow: true, ReOpen: true})
+	var event *ErrorEvent = nil
+	for l := range t.Lines {
+		line := l.Text
+		logLine, err := parseLogLine(line)
+		if err == nil && logLine.Level == ERROR_LOG_LEVEL {
+			event = logLine
 		}
-	}()
-	return errorChan
+		err = addIfCausedBy(line, event)
+		if err != nil {
+			continue
+		}
+		err = p.store.Add(event)
+		if err != nil {
+			log.Printf("Failed inserting Event[%v - %v] -> %v", event.Timestamp, event.Exception, err)
+		}
+		log.Printf("Passing Event to ErrorChan!")
+		eventBus <- *event
+	}
 }
 
-func addCausedBy(line string, event *ErrorEvent) error {
+func addIfCausedBy(line string, event *ErrorEvent) error {
 	if event == nil {
 		return errors.New("Cannot create ErrorEvent with nil event")
 	}

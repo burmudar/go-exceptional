@@ -46,7 +46,7 @@ type StatEngine interface {
 	Init()
 	updateStats()
 	getStat(event *ErrorEvent) *StatItem
-	ListenOn(eventBus chan ErrorEvent, n Notifier)
+	Listen(n Notifier) chan ErrorEvent
 }
 
 type statEngine struct {
@@ -109,28 +109,40 @@ func (e *statEngine) getStat(event *ErrorEvent) *StatItem {
 	return e.store.GetStatItem(event.Exception)
 }
 
-func (e *statEngine) ListenOn(eventBus chan ErrorEvent, n Notifier) {
+func (e *statEngine) Listen(n Notifier) chan ErrorEvent {
+	eventBus := make(chan ErrorEvent)
+	log.Printf("Creating StatCache")
 	cache := createStatCache(e)
-	for event := range eventBus {
-		now := time.Now()
-		if cache.shouldReset(&now) {
-			cache.reset()
-		}
-		log.Printf("Processing: %v -  %v\n", event.Timestamp, event.Exception)
-		var statItem *StatItem = cache.get(&event)
-		if statItem == nil {
-			log.Printf("No Stat Item. Exception is propbably new. Notifying of: %v\n", event.Exception)
-			notification := &ErrorNotification{}
-			notification.ErrorEvent = &event
-			n.Fire(notification)
-		} else {
-			var sum *DaySummary = e.store.GetDaySummary(&event)
-			if e.dayTotalExceedsStatLimit(statItem, sum) {
-				n.Fire(&ErrorNotification{&event, sum, statItem})
+	log.Printf("Reading from EventBus")
+	go func() {
+		for event := range eventBus {
+			now := time.Now()
+			if cache.shouldReset(&now) {
+				cache.reset()
 			}
-		}
+			log.Printf("Processing: %v - %v\n", event.Timestamp, event.Exception)
+			log.Printf("Retrieving StatItem for: %v - %v\n", event.Timestamp, event.Exception)
+			var statItem *StatItem = cache.get(&event)
+			log.Printf("Got: %v\n", statItem)
+			if statItem == nil {
+				log.Printf("No Stat Item. Exception is propbably new. Notifying of: %v\n", event.Exception)
+				notification := &ErrorNotification{}
+				notification.ErrorEvent = &event
+				n.Fire(notification)
+			} else {
+				log.Printf("Retrieving DaySummary for: %v - %v\n", event.Timestamp, event.Exception)
+				var sum *DaySummary = e.store.GetDaySummary(&event)
+				log.Printf("DaySummary: %v - %v [%v]\n", sum.Date, sum.Exception, sum.Total)
+				log.Printf("Checking if [%v] exceeds StdMax [%v] ...", sum.Total, statItem.StdDevMax())
+				if e.dayTotalExceedsStatLimit(statItem, sum) {
+					log.Printf("[%v] exceeds StdMax ... Fire Notification!", event.Exception)
+					n.Fire(&ErrorNotification{&event, sum, statItem})
+				}
+			}
 
-	}
+		}
+	}()
+	return eventBus
 }
 
 func (e *statEngine) dayTotalExceedsStatLimit(stat *StatItem, sum *DaySummary) bool {
