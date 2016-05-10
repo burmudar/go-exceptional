@@ -57,12 +57,12 @@ func main() {
 	} else {
 		log.Println("Database initiliazed")
 	}
-	loadAll(store.Errors(), findAllFilesToParse(oldLogsPath))
+	loadAll(store.Errors(), store.Metrics(), findAllFilesToParse(oldLogsPath))
 	statEngine := errord.NewStatEngine(store)
 	statEngine.Init()
 	log.Printf("Stat Engine initialized")
 	notifier := createNotifier(emailConfigPath, store.Notifications())
-	logParser := errord.NewLogFileParser(store.Errors())
+	logParser := errord.NewLogFileParser(store.Errors(), store.Metrics())
 	log.Printf("Watching %v", tailPath)
 	eventBus := logParser.Watch(tailPath)
 	log.Printf("Stat Engine listening for events from event bus")
@@ -108,20 +108,20 @@ func findAllFilesToParse(dir string) []string {
 	return files
 }
 
-func loadAll(store errord.ErrorStore, files []string) {
+func loadAll(es errord.ErrorStore, ms errord.MetricStore, files []string) {
 	if len(files) == 0 {
 		log.Printf("Empty list of files received. Not loading any files")
 	}
 	goGroup := new(sync.WaitGroup)
 	goGroup.Add(len(files))
 	for _, filePath := range files {
-		go func(s errord.ErrorStore, path string) {
-			parser := errord.NewLogFileParser(s)
+		go func(es errord.ErrorStore, ms errord.MetricStore, path string) {
+			parser := errord.NewLogFileParser(es, ms)
 			log.Printf("Loading File: %v\n", path)
 			parseStats := parser.Parse(path)
 			log.Printf("File: %v Stats -> %v", path, parseStats)
 			goGroup.Done()
-		}(store, filePath)
+		}(es, ms, filePath)
 	}
 	goGroup.Wait()
 }

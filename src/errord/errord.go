@@ -36,7 +36,8 @@ type ErrorParser interface {
 }
 
 type LogFileParser struct {
-	store ErrorStore
+	errorStorage  ErrorStore
+	metricStorage MetricStore
 }
 
 type ErrorEvent struct {
@@ -46,6 +47,14 @@ type ErrorEvent struct {
 	Level       Level
 	Source      string
 	Description string
+}
+
+type MetricEvent struct {
+	Timestamp *time.Time
+	Level     string
+	Source    string
+	Name      string
+	Value     float32
 }
 
 type ParseStats struct {
@@ -69,8 +78,8 @@ func (e *ErrorEvent) hasCausedBy() bool {
 	return false
 }
 
-func NewLogFileParser(store ErrorStore) ErrorParser {
-	return &LogFileParser{store}
+func NewLogFileParser(errorStorage ErrorStore, metricStorage MetricStore) ErrorParser {
+	return &LogFileParser{errorStorage, metricStorage}
 }
 
 func (p *LogFileParser) Parse(src string) ParseStats {
@@ -96,7 +105,7 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 		if err != nil {
 			continue
 		}
-		err = p.store.Add(event)
+		err = p.errorStorage.Add(event)
 		if err != nil {
 			log.Printf("Failed inserting Event[%v - %v]", event.Timestamp, event.Exception)
 		} else {
@@ -107,7 +116,7 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 }
 
 func (p *LogFileParser) Watch(src string) chan ErrorEvent {
-	//Should add some way to stop go routine. Maybe store the Tail t variable since it might have a stop method ?
+	//Should add some way to stop go routine. Maybe errorStorage the Tail t variable since it might have a stop method ?
 	eventBus := make(chan ErrorEvent)
 	go func() {
 		t, _ := tail.TailFile(src, tail.Config{Follow: true, ReOpen: true})
@@ -122,7 +131,7 @@ func (p *LogFileParser) Watch(src string) chan ErrorEvent {
 			if err != nil {
 				continue
 			}
-			err = p.store.Add(event)
+			err = p.errorStorage.Add(event)
 			if err != nil {
 				log.Printf("Failed inserting Event[%v - %v] -> %v", event.Timestamp, event.Exception, err)
 			}
