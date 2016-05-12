@@ -16,14 +16,14 @@ type errorStore struct {
 func (store *errorStore) Add(e *ErrorEvent) error {
 	var count int
 	log.Printf("Inserting -> %v : %v\n", *e.Timestamp, e.Exception)
-	store.db.QueryRow(`select count(id) from error_events where event_datetime=? AND source=? AND description=? AND exception=? AND excp_description=?`,
-		e.Timestamp, e.Source, e.Description, e.Exception, e.Detail).Scan(&count)
+	store.db.QueryRow(`select count(id) from error_events where event_datetime=? description=? AND exception=? AND excp_description=?`,
+		e.Timestamp, e.Description, e.Exception, e.Detail).Scan(&count)
 	if count > 0 {
 		log.Printf("[%v : %v] Already exists!\n", *e.Timestamp, e.Exception)
 		return nil
 	}
-	_, err := store.db.Exec(`insert into error_events(event_datetime, level, source, description, exception, excp_description) 
-	values (?, ?, ?, ?, ?, ?)`, e.Timestamp, string(e.Level), e.Source, e.Description, e.Exception, e.Detail)
+	_, err := store.db.Exec(`insert into error_events(event_datetime, level, description, exception, excp_description) 
+	values (?, ?, ?, ?, ?, ?)`, e.Timestamp, string(e.Level), e.Description, e.Exception, e.Detail)
 	if err != nil {
 		return err
 	}

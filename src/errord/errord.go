@@ -40,21 +40,22 @@ type LogFileParser struct {
 	metricStorage MetricStore
 }
 
-type ErrorEvent struct {
-	Exception   string
-	Detail      string
+type Event struct {
 	Timestamp   *time.Time
 	Level       Level
-	Source      string
 	Description string
 }
 
+type ErrorEvent struct {
+	Event
+	Exception string
+	Detail    string
+}
+
 type MetricEvent struct {
-	Timestamp *time.Time
-	Level     string
-	Source    string
-	Name      string
-	Value     float32
+	Event
+	Name  string
+	Value float32
 }
 
 type ParseStats struct {
@@ -68,7 +69,7 @@ func (p ParseStats) string() string {
 }
 
 func (e *ErrorEvent) string() string {
-	return fmt.Sprintf("Event: %v | %v | %v | %v", e.Timestamp, e.Level, e.Source, e.Description)
+	return fmt.Sprintf("Event: %v | %v | %v", e.Timestamp, e.Level, e.Description)
 }
 
 func (e *ErrorEvent) hasCausedBy() bool {
@@ -83,7 +84,6 @@ func NewLogFileParser(errorStorage ErrorStore, metricStorage MetricStore) ErrorP
 }
 
 func (p *LogFileParser) Parse(src string) ParseStats {
-	var event *ErrorEvent = nil
 	var stats ParseStats
 	file, err := os.Open(src)
 	defer file.Close()
@@ -95,19 +95,17 @@ func (p *LogFileParser) Parse(src string) ParseStats {
 	for scanner.Scan() {
 		line := scanner.Text()
 		stats.Lines++
-		logLine, err := parseLogLine(line)
+		event, err := parseLogLine(line)
 		if err != nil {
 			stats.Failed++
-		} else {
-			event = logLine
 		}
-		err = addIfCausedBy(line, event)
+		errorEvent, err := createErrorEvent(line, event)
 		if err != nil {
 			continue
 		}
-		err = p.errorStorage.Add(event)
+		err = p.errorStorage.Add(errorEvent)
 		if err != nil {
-			log.Printf("Failed inserting Event[%v - %v]", event.Timestamp, event.Exception)
+			log.Printf("Failed inserting Event[%v - %v]", event.Timestamp, errorEvent.Exception)
 		} else {
 			stats.Success++
 		}
@@ -120,52 +118,49 @@ func (p *LogFileParser) Watch(src string) chan ErrorEvent {
 	eventBus := make(chan ErrorEvent)
 	go func() {
 		t, _ := tail.TailFile(src, tail.Config{Follow: true, ReOpen: true})
-		var event *ErrorEvent = nil
 		for l := range t.Lines {
 			line := l.Text
-			logLine, err := parseLogLine(line)
-			if err == nil && logLine.Level == ERROR_LOG_LEVEL {
-				event = logLine
-			}
-			err = addIfCausedBy(line, event)
+			event, err := parseLogLine(line)
+			errorEvent, err := createErrorEvent(line, event)
 			if err != nil {
 				continue
 			}
-			err = p.errorStorage.Add(event)
+			err = p.errorStorage.Add(errorEvent)
 			if err != nil {
-				log.Printf("Failed inserting Event[%v - %v] -> %v", event.Timestamp, event.Exception, err)
+				log.Printf("Failed inserting Event[%v - %v] -> %v", errorEvent.Timestamp, errorEvent.Exception, err)
 			}
 			log.Printf("Passing Event to ErrorChan!")
-			eventBus <- *event
+			eventBus <- *errorEvent
 		}
 	}()
 	return eventBus
 }
 
-func addIfCausedBy(line string, event *ErrorEvent) error {
+func createErrorEvent(line string, event *Event) (*ErrorEvent, error) {
 	if event == nil {
-		return errors.New("Cannot create ErrorEvent with nil event")
+		return nil, errors.New("Cannot create ErrorEvent with nil event")
 	}
 	if containsCausedBy(line) {
+		errorEvent := &ErrorEvent{Event: *event}
 		excp, detail, err := parseCausedBy(line)
-		event.Exception = excp
-		event.Detail = detail
+		errorEvent.Exception = excp
+		errorEvent.Detail = detail
 		if err != nil {
-			return err
-		} else if !event.hasCausedBy() {
-			return errors.New("No exception nor detail extracted from: " + line)
+			return nil, err
+		} else if !errorEvent.hasCausedBy() {
+			return nil, errors.New("No exception nor detail extracted from: " + line)
 		} else {
-			return nil
+			return errorEvent, nil
 		}
 	}
-	return ErrNotCausedByLine
+	return nil, ErrNotCausedByLine
 }
 
-func parseLogLine(line string) (*ErrorEvent, error) {
+func parseLogLine(line string) (*Event, error) {
 	if !LOG_LINE_REGEX.MatchString(line) {
 		return nil, ErrNotLogLine
 	}
-	event := new(ErrorEvent)
+	event := new(Event)
 
 	matches := LOG_LINE_REGEX.FindStringSubmatch(line)
 
@@ -180,11 +175,7 @@ func parseLogLine(line string) (*ErrorEvent, error) {
 	}
 	event.Level = level
 
-	source := matches[3]
-	if source == "" {
-		return nil, errors.New("No Source found. Source cannot be empty")
-	}
-	event.Source = source
+	//Skipping matches[3] which is supposed to be the source
 	event.Description = matches[4]
 	return event, nil
 }
