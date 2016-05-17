@@ -38,7 +38,7 @@ func TestCalcDaysInPeriod(t *testing.T) {
 	startDate := newTime(2016, 03, 30, 12, 00, 00)
 	endDate := newTime(2016, 3, 31, 1, 0, 0)
 	summary := Summary{
-		Exception:    "excp1",
+		Name:         "excp1",
 		StartDate:    *startDate,
 		EndDate:      *endDate,
 		Total:        10,
@@ -92,7 +92,7 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 
 	day2 := newTime(2016, 04, 01, 12, 00, 00)
 	summary1 := Summary{
-		Exception: "excp1",
+		Name:      "excp1",
 		StartDate: *day1,
 		EndDate:   *day2,
 		Total:     10,
@@ -103,7 +103,7 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 	}
 	summary2 :=
 		Summary{
-			Exception: "excp2",
+			Name:      "excp2",
 			StartDate: *day1,
 			EndDate:   *day2,
 			Total:     12,
@@ -120,13 +120,13 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 	}
 
 	for i, stat := range stats {
-		if stats[i].Exception != "excp1" && stats[i].Exception != "excp2" {
-			t.Errorf("Stat Item at [%v] contains incorrect Exception: %v", i, stats[i].Exception)
+		if stats[i].Name != "excp1" && stats[i].Name != "excp2" {
+			t.Errorf("Stat Item at [%v] contains incorrect Name: %v", i, stats[i].Name)
 		}
-		if stats[i].Exception == "excp1" && stats[i].TotalErrors != 10 {
+		if stats[i].Name == "excp1" && stats[i].Total != 10 {
 			t.Errorf("Excp1 has 5 errors for day 1 and 5 for day 2, therefore Total Errors should be 10")
 		}
-		if stats[i].Exception == "excp2" && stats[i].TotalErrors != 12 {
+		if stats[i].Name == "excp2" && stats[i].Total != 12 {
 			t.Errorf("Excp2 has 6 errors for day 1 and 6 for day 2, therefore Total Errors should be 12")
 		}
 		if stat.DayCount != 1 {
@@ -144,7 +144,7 @@ func TestCalcAvg(t *testing.T) {
 		&DaySummary{2, day2, "excp1", 5},
 	}
 	summary := Summary{}
-	summary.Exception = "excp1"
+	summary.Name = "excp1"
 	summary.StartDate = *day1
 	summary.EndDate = day2
 	summary.Total = 10
@@ -171,7 +171,7 @@ func TestCalcVariance(t *testing.T) {
 		&DaySummary{2, day2, "excp1", 5},
 	}
 	summary := Summary{}
-	summary.Exception = "excp1"
+	summary.Name = "excp1"
 	summary.StartDate = *day1
 	summary.EndDate = day2
 	summary.Total = 10

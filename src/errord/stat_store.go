@@ -7,7 +7,7 @@ import (
 )
 
 type StatStore interface {
-	GetStatItem(excp string) *StatItem
+	GetStatItem(name string) *StatItem
 	InsertOrUpdateStatItem(s *StatItem) error
 	FetchSummaries() []Summary
 	FetchDaySummaries() []DaySummary
@@ -19,11 +19,11 @@ type statStore struct {
 	db *sql.DB
 }
 
-func (store *statStore) GetStatItem(excp string) *StatItem {
-	r := store.db.QueryRow(`select exception, mean, variance, std_dev, total_errs, day_count, modified_at from error_stats where exception = ?`, excp)
+func (store *statStore) GetStatItem(name string) *StatItem {
+	r := store.db.QueryRow(`select name, mean, variance, std_dev, total, day_count, modified_at from event_stats where name = ?`, name)
 	i := new(StatItem)
 	var tempDate string
-	err := r.Scan(&i.Exception, &i.Mean, &i.Variance, &i.StdDev, &i.TotalErrors, &i.DayCount, &tempDate)
+	err := r.Scan(&i.Name, &i.Mean, &i.Variance, &i.StdDev, &i.Total, &i.DayCount, &tempDate)
 	if err != nil {
 		log.Printf("Failed mapping stat item: %v\n", err)
 	}
@@ -37,12 +37,12 @@ func (store *statStore) GetStatItem(excp string) *StatItem {
 
 func (store *statStore) InsertOrUpdateStatItem(s *StatItem) error {
 	var date = s.ModifiedAt.Format(DATE_FORMAT)
-	_, err := store.db.Exec(`insert into error_stats(exception, mean, variance, std_dev, total_errs, day_count, modified_at) values (?, ?, ?, ?, ?, ?, ?)`,
-		&s.Exception, &s.Mean, &s.Variance, &s.StdDev, &s.TotalErrors, &s.DayCount, &date)
+	_, err := store.db.Exec(`insert into event_stats(name, mean, variance, std_dev, total, day_count, modified_at) values (?, ?, ?, ?, ?, ?, ?)`,
+		&s.Name, &s.Mean, &s.Variance, &s.StdDev, &s.Total, &s.DayCount, &date)
 	if err != nil {
 		log.Println("Assuming insert failed because record already exists trying UPDATE")
-		_, err := store.db.Exec(`UPDATE error_stats SET mean = ?, variance = ?, std_dev = ?, total_errs = ?, day_count = ?, modified_at = ? WHERE exception = ?`,
-			&s.Mean, &s.Variance, &s.StdDev, &s.TotalErrors, &s.DayCount, &date, &s.Exception)
+		_, err := store.db.Exec(`UPDATE event_stats SET mean = ?, variance = ?, std_dev = ?, total = ?, day_count = ?, modified_at = ? WHERE name = ?`,
+			&s.Mean, &s.Variance, &s.StdDev, &s.Total, &s.DayCount, &date, &s.Name)
 		if err != nil {
 			log.Println("Failed UPDATING DB with [%v] : %v\n", *s, err)
 		}
@@ -52,7 +52,7 @@ func (store *statStore) InsertOrUpdateStatItem(s *StatItem) error {
 
 func (store *statStore) FetchSummaries() []Summary {
 	var summaries []Summary
-	rows, err := store.db.Query("select min(error_date) as first_seen, exception, sum(total) as total from error_day_summary group by exception order by error_date")
+	rows, err := store.db.Query("select min(created_at) as first_seen, name, sum(total) as total from day_summary group by name order by created_at")
 	if err != nil {
 		log.Printf("Failed to retrieve all Summaries: %v\n", err)
 		return summaries
@@ -60,7 +60,7 @@ func (store *statStore) FetchSummaries() []Summary {
 	for rows.Next() {
 		var s Summary
 		var tempDate string
-		err = rows.Scan(&tempDate, &s.Exception, &s.Total)
+		err = rows.Scan(&tempDate, &s.Name, &s.Total)
 		if err != nil {
 			log.Printf("Failed mapping summary: %v", err)
 		} else {
@@ -69,7 +69,7 @@ func (store *statStore) FetchSummaries() []Summary {
 				log.Printf("Unkown Date format in Day Summary: %v", err)
 			} else {
 				s.EndDate = time.Now()
-				s.DaySummaries = store.FetchDaySummariesByException(s.Exception)
+				s.DaySummaries = store.FetchDaySummariesByName(s.Name)
 				summaries = append(summaries, s)
 			}
 		}
@@ -77,35 +77,35 @@ func (store *statStore) FetchSummaries() []Summary {
 	return summaries
 }
 
-func (store *statStore) FetchDaySummariesByException(excp string) []*DaySummary {
+func (store *statStore) FetchDaySummariesByName(name string) []*DaySummary {
 	var summaries []*DaySummary
-	rows, err := store.db.Query("select * from error_day_summary where exception = ?", excp)
+	rows, err := store.db.Query("select * from day_summary where name = ?", name)
 	if err != nil {
-		log.Printf("Failed fetching Day Summaries for [%v]: %v", excp, err)
+		log.Printf("Failed fetching Day Summaries for [%v]: %v", name, err)
 		return summaries
 	}
 	for rows.Next() {
 		var s DaySummary
-		err = rows.Scan(&s.Id, &s.Date, &s.Exception, &s.Total)
+		err = rows.Scan(&s.Id, &s.Date, &s.Name, &s.Total)
 		if err != nil {
-			log.Printf("Failed mapping Day Summary for [%v]: %v", excp, err)
+			log.Printf("Failed mapping Day Summary for [%v]: %v", name, err)
 		} else {
 			summaries = append(summaries, &s)
 		}
 	}
-	log.Printf("Found and mapped %v Day Summaries for [%v]", len(summaries), excp)
+	log.Printf("Found and mapped %v Day Summaries for [%v]", len(summaries), name)
 	return summaries
 }
 
 func (store *statStore) FetchDaySummaries() []DaySummary {
 	var summaries []DaySummary
-	rows, err := store.db.Query("select * from error_day_summary")
+	rows, err := store.db.Query("select * from day_summary")
 	if err != nil {
 		return summaries
 	}
 	for rows.Next() {
 		var s DaySummary
-		rows.Scan(&s.Id, &s.Date, &s.Exception, &s.Total)
+		rows.Scan(&s.Id, &s.Date, &s.Name, &s.Total)
 		summaries = append(summaries, s)
 	}
 	return summaries
@@ -118,7 +118,7 @@ func (store *statStore) GetDaySummary(event *ErrorEvent) *DaySummary {
 		Scan into tempDate string since Scan can't automatically figure out the Date format. So we scan to a string and parse the string with a known date layout
 	*/
 	err := store.db.QueryRow("select DATE(event_datetime) as error_date, exception, count(exception) as total from error_events where error_date = DATE(?) group by DATE(error_date), exception",
-		event.Timestamp).Scan(&tempDate, &s.Exception, &s.Total)
+		event.Timestamp).Scan(&tempDate, &s.Name, &s.Total)
 	if err != nil {
 		log.Printf("Failed to map DaySummary for [%v] : %v\n", *event, err)
 	}
@@ -132,7 +132,7 @@ func (store *statStore) GetDaySummary(event *ErrorEvent) *DaySummary {
 
 func (store *statStore) UpdateDaySummaries() error {
 	_, err := store.db.Exec(`
-		insert or ignore into error_day_summary(error_date, exception, total) select DATE(event_datetime) as error_date, exception, count(exception) as total from error_events group by DATE(error_date), exception
+		insert or ignore into day_summary(created_at, name, total) select DATE(event_datetime) as error_date, exception, count(exception) as total from error_events group by DATE(error_date), exception
 	`)
 	return err
 }

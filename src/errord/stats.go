@@ -7,7 +7,7 @@ import (
 )
 
 type Summary struct {
-	Exception    string
+	Name         string
 	StartDate    time.Time
 	EndDate      time.Time
 	DaySummaries []*DaySummary
@@ -22,20 +22,20 @@ func (s Summary) DaysInPeriod() int {
 }
 
 type DaySummary struct {
-	Id        int
-	Date      time.Time
-	Exception string
-	Total     int
+	Id    int
+	Date  time.Time
+	Name  string
+	Total int
 }
 
 type StatItem struct {
-	Exception   string
-	Mean        float64
-	Variance    float64
-	StdDev      float64
-	TotalErrors int
-	DayCount    int
-	ModifiedAt  *time.Time
+	Name       string
+	Mean       float64
+	Variance   float64
+	StdDev     float64
+	Total      int
+	DayCount   int
+	ModifiedAt *time.Time
 }
 
 func (s *StatItem) StdDevMax() int {
@@ -87,8 +87,8 @@ func (e *statEngine) calcStats(summaries []Summary) []*StatItem {
 	log.Printf("Crunching Day summaries to update Stat Items for all exceptions\n")
 	statMap := createMapWithSummaries(summaries)
 	stats := make([]*StatItem, 0)
-	for excp, summaries := range statMap {
-		log.Printf("Calculating stats for [%v]\n", excp)
+	for name, summaries := range statMap {
+		log.Printf("Calculating stats for [%v]\n", name)
 		statItem := createStatItem(summaries)
 		stats = append(stats, statItem)
 	}
@@ -101,7 +101,7 @@ func createStatItem(s Summary) *StatItem {
 	variance := s.calcVariance(avg)
 	stdDev := s.calcStdDev(variance)
 	now := time.Now()
-	statItem := StatItem{s.Exception, avg, variance, stdDev, s.Total, s.DaysInPeriod(), &now}
+	statItem := StatItem{s.Name, avg, variance, stdDev, s.Total, s.DaysInPeriod(), &now}
 	return &statItem
 }
 
@@ -130,7 +130,7 @@ func (e *statEngine) Listen(eventBus chan ErrorEvent, n Notifier) {
 		} else {
 			log.Printf("Retrieving DaySummary for: %v - %v\n", event.Timestamp, event.Exception)
 			var sum *DaySummary = e.store.GetDaySummary(&event)
-			log.Printf("DaySummary: %v - %v [%v]\n", sum.Date, sum.Exception, sum.Total)
+			log.Printf("DaySummary: %v - %v [%v]\n", sum.Date, sum.Name, sum.Total)
 			log.Printf("Checking if [%v] exceeds StdMax [%v] ...", sum.Total, statItem.StdDevMax())
 			if e.dayTotalExceedsStatLimit(statItem, sum) {
 				log.Printf("[%v] exceeds StdMax ... Fire Notification!", event.Exception)
@@ -195,9 +195,9 @@ func (c *statCache) get(event *ErrorEvent) *StatItem {
 func createMapWithSummaries(summaries []Summary) map[string]Summary {
 	var statMap map[string]Summary = make(map[string]Summary)
 	for _, s := range summaries {
-		log.Printf("Adding [%v] Summary with [%v] Day Summaries to Map", s.Exception, len(s.DaySummaries))
-		if _, ok := statMap[s.Exception]; !ok {
-			statMap[s.Exception] = s
+		log.Printf("Adding [%v] Summary with [%v] Day Summaries to Map", s.Name, len(s.DaySummaries))
+		if _, ok := statMap[s.Name]; !ok {
+			statMap[s.Name] = s
 		}
 	}
 	return statMap

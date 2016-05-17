@@ -12,43 +12,41 @@ const SQL_TABLE_ERROR_EVENTS string = `create table error_events
 		id INTEGER not null primary key,
 		event_datetime DATETIME not null,
 		level VARCHAR(10) not null,
-		source VARCHAR(30) not null,
 		description VARCHAR(255) not null,
 		exception VARCHAR(255) not null,
 		excp_description VARCHAR(255) not null,
-		unique(event_datetime, exception, excp_description)
+		unique(event_datetime, exception)
 	)
 	`
 const SQL_TABLE_NOTIFICATIONS string = `create table notifications(
 		id INTEGER not null primary key,
 		created_at DATETIME not null,
-		exception VARCHAR(255) not null,
-		unique(created_at, exception))`
+		subject VARCHAR(255) not null,
+		unique(created_at, subject))`
 
-const SQL_ERROR_STATS string = `
-	create table error_stats (
+const SQL_EVENT_STATS string = `
+	create table event_stats (
 		id INTEGER not null primary key, 
-		exception VARCHAR(255),
+		name VARCHAR(255),
 		mean DOUBLE not null,
 		variance INTEGER not null,
 		std_dev DOUBLE not null,
-		total_errs INTEGER not null,
+		total INTEGER not null,
 		day_count INTEGER not null,
 		modified_at DATETIME not null,
-		unique(exception)
+		unique(name)
 	)
 	`
-const SQL_TABLE_ERROR_DAY_SUMMARY string = `
-	create table error_day_summary(
+const SQL_TABLE_DAY_SUMMARY string = `
+	create table day_summary(
 		id INTEGER not null primary key,
-		error_date DATETIME not null,
-		exception VARCHAR(255) not null,
+		created_at DATETIME not null,
+		name VARCHAR(255) not null,
+		count INTEGER not null,
 		total INTEGER not null,
-		unique(error_date, exception)
+		unique(created_at, name)
 	)
 	`
-const SQL_VIEW_EXCEPTIONS_PER_DAY string = `CREATE VIEW exceptions_per_day AS select DATE(event_datetime), exception, count(exception) as excp_count from error_events group by DATE(event_datetime),exception order by event_datetime`
-const SQL_VIEW_UNIQUE_EXCEPTIONS string = `CREATE VIEW unique_exception AS select min(date(event_datetime)), exception, count(exception) as excp_count, cast((julianday('now') - julianday(event_datetime)) as int) as total from error_events group by exception order by event_datetime`
 
 var ErrTableExists error = errors.New("Not creating Table. Table already exists")
 
@@ -109,12 +107,9 @@ func initDB() (*sql.DB, []error) {
 	}
 	var tables map[string]string = make(map[string]string)
 	tables["error_events"] = SQL_TABLE_ERROR_EVENTS
-	tables["error_stats"] = SQL_ERROR_STATS
-	tables["error_day_summary"] = SQL_TABLE_ERROR_DAY_SUMMARY
+	tables["event_stats"] = SQL_EVENT_STATS
+	tables["day_summary"] = SQL_TABLE_DAY_SUMMARY
 	tables["notifications"] = SQL_TABLE_NOTIFICATIONS
-	//kind of like tables ... but really views
-	tables["exceptions_per_day"] = SQL_VIEW_EXCEPTIONS_PER_DAY
-	tables["unique_exceptions"] = SQL_VIEW_UNIQUE_EXCEPTIONS
 	for table, sql := range tables {
 		err := createTable(db, table, sql)
 		if err == ErrTableExists {
