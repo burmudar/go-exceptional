@@ -97,8 +97,8 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 		EndDate:   *day2,
 		Total:     10,
 		DaySummaries: []*DaySummary{
-			&DaySummary{1, *day1, "excp1", 5},
-			&DaySummary{2, *day2, "excp1", 5},
+			&DaySummary{1, *day1, "excp1", 5, 5},
+			&DaySummary{2, *day2, "excp1", 5, 5},
 		},
 	}
 	summary2 :=
@@ -108,8 +108,8 @@ func TestCalcStatsWithSummaries(t *testing.T) {
 			EndDate:   *day2,
 			Total:     12,
 			DaySummaries: []*DaySummary{
-				&DaySummary{3, *day1, "excp2", 6},
-				&DaySummary{4, *day2, "excp2", 6},
+				&DaySummary{3, *day1, "excp2", 6, 6},
+				&DaySummary{4, *day2, "excp2", 6, 6},
 			},
 		}
 	summaries := []Summary{summary1, summary2}
@@ -140,8 +140,8 @@ func TestCalcAvg(t *testing.T) {
 	day1 := newTime(2016, 03, 31, 12, 00, 00)
 	var day2 = time.Now()
 	summaries := []*DaySummary{
-		&DaySummary{1, *day1, "excp1", 5},
-		&DaySummary{2, day2, "excp1", 5},
+		&DaySummary{1, *day1, "excp1", 5, 5},
+		&DaySummary{2, day2, "excp1", 5, 5},
 	}
 	summary := Summary{}
 	summary.Name = "excp1"
@@ -167,8 +167,8 @@ func TestCalcVariance(t *testing.T) {
 	day1 := newTime(2016, 03, 31, 12, 00, 00)
 	var day2 = time.Now()
 	summaries := []*DaySummary{
-		&DaySummary{1, *day1, "excp1", 5},
-		&DaySummary{2, day2, "excp1", 5},
+		&DaySummary{1, *day1, "excp1", 5, 5},
+		&DaySummary{2, day2, "excp1", 5, 5},
 	}
 	summary := Summary{}
 	summary.Name = "excp1"

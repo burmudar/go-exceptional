@@ -11,6 +11,7 @@ type Summary struct {
 	StartDate    time.Time
 	EndDate      time.Time
 	DaySummaries []*DaySummary
+	Count        int
 	Total        int
 }
 
@@ -25,6 +26,7 @@ type DaySummary struct {
 	Id    int
 	Date  time.Time
 	Name  string
+	Count int
 	Total int
 }
 

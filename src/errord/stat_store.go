@@ -52,7 +52,7 @@ func (store *statStore) InsertOrUpdateStatItem(s *StatItem) error {
 
 func (store *statStore) FetchSummaries() []Summary {
 	var summaries []Summary
-	rows, err := store.db.Query("select min(created_at) as first_seen, name, sum(total) as total from day_summary group by name order by created_at")
+	rows, err := store.db.Query("select min(created_at) as first_seen, name, sum(count) as count, sum(total) as total from day_summary group by name order by created_at")
 	if err != nil {
 		log.Printf("Failed to retrieve all Summaries: %v\n", err)
 		return summaries
@@ -60,7 +60,7 @@ func (store *statStore) FetchSummaries() []Summary {
 	for rows.Next() {
 		var s Summary
 		var tempDate string
-		err = rows.Scan(&tempDate, &s.Name, &s.Total)
+		err = rows.Scan(&tempDate, &s.Name, &s.Count, &s.Total)
 		if err != nil {
 			log.Printf("Failed mapping summary: %v", err)
 		} else {
@@ -86,7 +86,7 @@ func (store *statStore) FetchDaySummariesByName(name string) []*DaySummary {
 	}
 	for rows.Next() {
 		var s DaySummary
-		err = rows.Scan(&s.Id, &s.Date, &s.Name, &s.Total)
+		err = rows.Scan(&s.Id, &s.Date, &s.Name, &s.Count, &s.Total)
 		if err != nil {
 			log.Printf("Failed mapping Day Summary for [%v]: %v", name, err)
 		} else {
@@ -105,7 +105,7 @@ func (store *statStore) FetchDaySummaries() []DaySummary {
 	}
 	for rows.Next() {
 		var s DaySummary
-		rows.Scan(&s.Id, &s.Date, &s.Name, &s.Total)
+		rows.Scan(&s.Id, &s.Date, &s.Name, &s.Count, &s.Total)
 		summaries = append(summaries, s)
 	}
 	return summaries
@@ -132,7 +132,7 @@ func (store *statStore) GetDaySummary(event *ErrorEvent) *DaySummary {
 
 func (store *statStore) UpdateDaySummaries() error {
 	_, err := store.db.Exec(`
-		insert or ignore into day_summary(created_at, name, total) select DATE(event_datetime) as error_date, exception, count(exception) as total from error_events group by DATE(error_date), exception
+		insert or ignore into day_summary(created_at, name, count, total) select DATE(event_datetime) as error_date, exception, count(exception) as count, count(exception) as total from error_events group by DATE(error_date), exception
 	`)
 	return err
 }
