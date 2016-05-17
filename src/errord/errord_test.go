@@ -33,11 +33,6 @@ func TestparseLogLineOfINFOLine(t *testing.T) {
 		t.Errorf("Event does not contain the Timestamp as its defined in the INFO line: [%v] - Error: [%v]", logEvent.Timestamp, err)
 	}
 
-	expctedSource := "worker.DealerBalanceUpdater:27"
-	if logEvent.Source != expctedSource {
-		t.Errorf("Event does not contain source as its defined in the INFO line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
-	}
-
 	expectedDescription := "Starting update of dealer balance"
 	if logEvent.Description != expectedDescription {
 		t.Errorf("Event does not contain description as its defined in the INFO line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
@@ -62,11 +57,6 @@ func TestparseLogLineOfTRACELine(t *testing.T) {
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 608*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
 		t.Errorf("Event does not contain the Timestamp as its defined in the TRACE line: [%v] - Error: [%v]", logEvent.Timestamp, err)
-	}
-
-	expctedSource := "worker.SimConsumerImpl:183"
-	if logEvent.Source != expctedSource {
-		t.Errorf("Event does not contain source as its defined in the TRACE line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
 	}
 
 	expectedDescription := "null : Retrieving Balance of Sim id: 0 from Recharge Service"
@@ -95,11 +85,6 @@ func TestParseLogLineOfDEBUGLine(t *testing.T) {
 		t.Errorf("Event does not contain the Timestamp as its defined in the DEBUG line: [%v] - Error: [%v]", logEvent.Timestamp, err)
 	}
 
-	expctedSource := "worker.SimConsumerImpl:129"
-	if logEvent.Source != expctedSource {
-		t.Errorf("Event does not contain source as its defined in the DEBUG line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
-	}
-
 	expectedDescription := "null : Sending recharge to service"
 	if logEvent.Description != expectedDescription {
 		t.Errorf("Event does not contain description as its defined in the DEBUG line. Got [%v] Expected [%v]", logEvent.Description, expectedDescription)
@@ -124,11 +109,6 @@ func TestParseLogLineOfERRORLine(t *testing.T) {
 	expectedTime := time.Date(2016, 3, 23, 15, 41, 48, 939*1000000, time.UTC)
 	if *logEvent.Timestamp != expectedTime {
 		t.Errorf("Event does not contain the Timestamp as its defined in the ERROR line: [%v] - Error: [%v]", logEvent.Timestamp, err)
-	}
-
-	expctedSource := "client.AirtelService:54"
-	if logEvent.Source != expctedSource {
-		t.Errorf("Event does not contain source as its defined in the ERROR line. Got [%v] Expected [%v]", logEvent.Source, expctedSource)
 	}
 
 	expectedDescription := "0833574730 : Encountered an error while querying balance : TranRef[testRef]"
@@ -234,55 +214,55 @@ func TestParsedCausedBy(t *testing.T) {
 	}
 }
 
-func TestAddCausedBy(t *testing.T) {
+func TestCreateErrorEvent(t *testing.T) {
 	var NORMAL_CAUSED_BY string = "Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException: UPDATE command denied to user 'fsi_app'@'10.0.1.231' for table 'recharge_provider_setting'"
 	var CAUSED_BY_WITH_MULTIPLE_COLONS string = "Caused by: com.flickswitch.sc.provider.ProviderServiceException: com.flickswitch.client.airtelke.balance.BalanceServiceException: Server responded with Failure status. Error detail -> TWSS_109 : Your request for service could not be processed due to Network error. Pls try again"
 	var CAUSED_BY_WITHOUT_DETAIL string = "Caused by: javax.xml.bind.UnmarshalException"
 	var CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL string = "Caused by:"
-	var event *ErrorEvent = new(ErrorEvent)
+	var event *Event = new(Event)
 
 	excp, detail, err := parseCausedBy(NORMAL_CAUSED_BY)
-	err = addIfCausedBy(NORMAL_CAUSED_BY, event)
-	if excp != event.Exception && detail != event.Detail {
-		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, event)
+	errorEvent, err := createErrorEvent(NORMAL_CAUSED_BY, event)
+	if excp != errorEvent.Exception && detail != errorEvent.Detail {
+		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, errorEvent)
 	}
-	if event.hasCausedBy() && err != nil {
+	if errorEvent.hasCausedBy() && err != nil {
 		t.Errorf("Received error when adding Caused By, event though event reports it has caused by")
 	}
 
 	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_DETAIL)
-	err = addIfCausedBy(CAUSED_BY_WITHOUT_DETAIL, event)
-	if excp != event.Exception && detail != event.Detail {
-		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, event)
+	errorEvent, err = createErrorEvent(CAUSED_BY_WITHOUT_DETAIL, event)
+	if excp != errorEvent.Exception && detail != errorEvent.Detail {
+		t.Errorf("Exception [%v] Detail [%v] not added to event: %v", excp, detail, errorEvent)
 	}
-	if event.hasCausedBy() && err != nil {
+	if errorEvent.hasCausedBy() && err != nil {
 		t.Errorf("Received error when adding Caused By, event though event reports it has caused by")
 	}
 
 	excp, detail, err = parseCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL)
-	err = addIfCausedBy(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
+	errorEvent, err = createErrorEvent(CAUSED_BY_WITHOUT_EXCEPTION_OR_DETAIL, event)
 	if err == nil {
 		t.Errorf("Caused by with no exception nor detail is invalid and should return err. Got [%v]\n", err)
 	}
-	if !event.hasCausedBy() && err == nil {
-		t.Errorf("When event report it has no Caused By after add, err should not be nil")
+	if errorEvent != nil {
+		t.Error("When Caused By is not present, no ErrorEvent should be created")
 	}
 
 	excp, detail, err = parseCausedBy("")
-	err = addIfCausedBy("", event)
+	errorEvent, err = createErrorEvent("", event)
 	if err == nil {
 		t.Errorf("Empty string is not a valid Caused By Error should not be nil")
 	}
-	if !event.hasCausedBy() && err == nil {
-		t.Errorf("When event report it has no Caused By after add, err should not be nil")
+	if errorEvent != nil {
+		t.Error("When Caused By is not present, no ErrorEvent should be created")
 	}
 
 	excp, detail, err = parseCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS)
-	err = addIfCausedBy(CAUSED_BY_WITH_MULTIPLE_COLONS, event)
-	if excp != event.Exception && detail != event.Detail {
-		t.Errorf("Exception [%v] Detail [%v] not added to event.", excp, detail, event)
+	errorEvent, err = createErrorEvent(CAUSED_BY_WITH_MULTIPLE_COLONS, event)
+	if excp != errorEvent.Exception && detail != errorEvent.Detail {
+		t.Errorf("Exception [%v] Detail [%v] not added to event.", excp, detail, errorEvent)
 	}
-	if event.hasCausedBy() && err != nil {
+	if errorEvent.hasCausedBy() && err != nil {
 		t.Errorf("Received error when adding Caused By, event though event reports it has caused by")
 	}
 
